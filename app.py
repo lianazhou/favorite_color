@@ -23,7 +23,7 @@ from model import (
 from utils import (
     is_dark, plot_weights, plot_top_colors, plot_hue_brightness_scatter
 )
-from st_keyup import st_keyup
+
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -367,26 +367,42 @@ that maximize the joint probability of every choice you made.
 elif st.session_state.phase == "playing":
     n_done = st.session_state.round
 
-    # st_keyup captures keypresses reliably inside Streamlit's iframe.
-    # It renders a small invisible text input that fires on every keyup event.
-    # We hide it with CSS and only use its return value for arrow key detection.
-    key_val = st_keyup("", key="keyup_listener", label_visibility="collapsed")
-
     # Ensure a pair is ready
     if st.session_state.current_pair is None:
         st.session_state.current_pair = pick_pair()
 
     idx_A, idx_B = st.session_state.current_pair
 
-    # Process arrow key — guard with last_key to avoid double-firing on hold
-    if key_val in ("ArrowLeft", "ArrowRight") and key_val != st.session_state.last_key:
-        st.session_state.last_key = key_val
-        chosen = idx_A if key_val == "ArrowLeft" else idx_B
-        other  = idx_B if key_val == "ArrowLeft" else idx_A
+    # Arrow key handling via query params.
+    # st.html() injects JS directly into the page (no iframe sandbox).
+    # When an arrow key is pressed, JS sets a query param and reloads,
+    # which Streamlit reads on the next run.
+    params = st.query_params
+    key_val = params.get("key", "")
+    if key_val in ("left", "right"):
+        st.query_params.clear()
+        chosen = idx_A if key_val == "left" else idx_B
+        other  = idx_B if key_val == "left" else idx_A
         record_choice(chosen, other)
         st.rerun()
-    elif key_val not in ("ArrowLeft", "ArrowRight"):
-        st.session_state.last_key = ""
+
+    # Inject the key listener directly into the page DOM (not an iframe)
+    st.html("""
+<script>
+(function() {
+  if (window.__arrowKeysAttached) return;
+  window.__arrowKeysAttached = true;
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      var url = new URL(window.location.href);
+      url.searchParams.set('key', e.key === 'ArrowLeft' ? 'left' : 'right');
+      window.location.href = url.toString();
+    }
+  });
+})();
+</script>
+""", unsafe_allow_javascript=True)
 
     name_A, hex_A = COLOR_NAMES[idx_A], COLOR_HEXES[idx_A]
     name_B, hex_B = COLOR_NAMES[idx_B], COLOR_HEXES[idx_B]
