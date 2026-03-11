@@ -24,11 +24,6 @@ from utils import (
     is_dark, plot_weights, plot_top_colors, plot_hue_brightness_scatter
 )
 import streamlit.components.v1 as _components
-from pathlib import Path as _Path
-_arrow_component = _components.declare_component(
-    "arrow_keys",
-    path=str(_Path(__file__).parent / "components" / "arrow_keys")
-)
 
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -381,14 +376,40 @@ elif st.session_state.phase == "playing":
     name_A, hex_A = COLOR_NAMES[idx_A], COLOR_HEXES[idx_A]
     name_B, hex_B = COLOR_NAMES[idx_B], COLOR_HEXES[idx_B]
 
-    # Arrow key component: attaches keydown to window.parent and sends
-    # value via postMessage — no page reload, no iframe focus needed.
-    key_val = _arrow_component(key="arrow_keys", default="")
-    if key_val in ("left", "right"):
-        chosen = idx_A if key_val == "left" else idx_B
-        other  = idx_B if key_val == "left" else idx_A
-        record_choice(chosen, other)
-        st.rerun()
+    # Inject JS that listens for arrow keys on the parent window and
+    # programmatically clicks the left/right Streamlit buttons.
+    # Uses allow-same-origin sandbox to access window.parent.document.
+    # btn_a and btn_b are the keys we pass to st.button below.
+    _components.html("""
+<script>
+(function() {
+  var par = window.parent.document;
+  if (par.__arrowKeysReady) return;
+  par.__arrowKeysReady = true;
+  par.addEventListener('keydown', function(e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    // Find the choice buttons by their data-testid keys (btn_a / btn_b).
+    // Streamlit sets the key as part of the element's test id path.
+    // Fallback: find all .stButton buttons and take first two.
+    var btnA = par.querySelector('[data-testid="stBaseButton-secondary"][aria-label="btn_a"], [key="btn_a"] button');
+    var btnB = par.querySelector('[data-testid="stBaseButton-secondary"][aria-label="btn_b"], [key="btn_b"] button');
+    
+    // Most reliable fallback: all visible stButton buttons on page, take [0] and [1]
+    if (!btnA || !btnB) {
+      var all = Array.from(par.querySelectorAll('.stButton > button')).filter(function(b) {
+        return b.offsetParent !== null; // visible only
+      });
+      btnA = all[0];
+      btnB = all[1];
+    }
+    
+    if (e.key === 'ArrowLeft' && btnA) btnA.click();
+    if (e.key === 'ArrowRight' && btnB) btnB.click();
+  });
+})();
+</script>
+""", height=0)
 
     # Header row
     left_head, right_head = st.columns([3, 1])
