@@ -60,14 +60,13 @@ st.markdown("""
   .stApp {
     background: linear-gradient(
       135deg,
-      #f9c5d1 0%,
-      #fddcaa 20%,
-      #b8f0d8 38%,
-      #b8d8f8 56%,
-      #d8b8f8 76%,
-      #f9c5d1 100%
+      #fde8f0 0%,
+      #fef3e2 18%,
+      #e8f8f0 36%,
+      #e8f0fe 54%,
+      #f3e8fe 72%,
+      #fde8f0 100%
     ) !important;
-    background-attachment: fixed !important;
   }
 
   /* Typography */
@@ -463,47 +462,32 @@ elif st.session_state.phase == "playing":
     name_A, hex_A = COLOR_NAMES[idx_A], COLOR_HEXES[idx_A]
     name_B, hex_B = COLOR_NAMES[idx_B], COLOR_HEXES[idx_B]
 
-    # Arrow keys: highlight chosen swatch for 500ms, THEN click to trigger rerun.
-    # The highlight is done by injecting an inline <style> that survives until
-    # Streamlit's rerun clears the DOM — so it stays visible the whole 500ms.
+    # Arrow keys: highlight swatch visually first (instant), then click after delay
     _components.html("""
 <script>
 (function() {
   var par = window.parent.document;
   if (par.__arrowKeysReady) return;
   par.__arrowKeysReady = true;
-  var busy = false;
-
   par.addEventListener('keydown', function(e) {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    if (busy) return;
-    busy = true;
     e.preventDefault();
     var isLeft = e.key === 'ArrowLeft';
 
-    // Directly style the swatch divs — more reliable than class toggling
+    // Highlight the chosen swatch immediately
     var swatches = par.querySelectorAll('.swatch-wrap');
+    swatches.forEach(function(s) { s.classList.remove('selected'); });
     if (swatches.length >= 2) {
-      var chosen = swatches[isLeft ? 0 : 1];
-      var other  = swatches[isLeft ? 1 : 0];
-
-      // Dim the unchosen one, ring + brighten the chosen one
-      other.style.opacity  = '0.35';
-      other.style.filter   = 'grayscale(60%)';
-      chosen.style.outline = '4px solid rgba(0,0,0,0.82)';
-      chosen.style.outlineOffset = '3px';
-      chosen.style.borderRadius  = '10px 10px 0 0';
-      chosen.style.transition    = 'outline 0s';
+      swatches[isLeft ? 0 : 1].classList.add('selected');
     }
 
-    // After 500ms, click the button to proceed
+    // Click the button after a short delay so user sees the highlight
     setTimeout(function() {
       var btns = Array.from(par.querySelectorAll('.stButton > button'))
                       .filter(function(b) { return b.offsetParent !== null; });
       var idx = isLeft ? 0 : 1;
       if (btns[idx]) btns[idx].click();
-      busy = false;
-    }, 500);
+    }, 220);
   });
 })();
 </script>""", height=0)
