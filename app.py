@@ -732,31 +732,14 @@ elif st.session_state.phase == "results":
         st.markdown("""
 **Pairwise preference model**
 
-Each comparison is a Bernoulli r.v. with probability set by logistic regression:
-
-```
-P(choose A | w) = σ( w · (x_A − x_B) )     σ(z) = 1 / (1 + e^{−z})
-```
-
+Each comparison is a Bernoulli r.v. with probability set by logistic regression.
+                    
 **MLE objective (regularized negative log-likelihood)**
-
-```
-ŵ = argmin  −∑ᵢ [yᵢ log pᵢ + (1−yᵢ) log(1−pᵢ)]  +  λ‖w‖²
-```
 
 **Gradient used in each Adam step**
 
-```
-∇L(w) = (1/n) ∑ᵢ (pᵢ − yᵢ)(x_Aᵢ − x_Bᵢ)  +  2λw
-```
-
 **Adam update rule** (adaptive moment estimation, 600 steps per round)
 
-```
-m ← β₁m + (1−β₁)∇         first moment  (momentum)
-v ← β₂v + (1−β₂)∇²        second moment (per-feature learning rate)
-w ← w − α · m̂ / (√v̂ + ε)  bias-corrected parameter update
-```
 
 **Scoring & prediction:** `score(c) = ŵ · x_c` for all 121 colors → argmax.  
 Softmax over raw scores yields the probability distribution shown above.
