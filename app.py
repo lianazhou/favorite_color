@@ -23,6 +23,7 @@ from model import (
 from utils import (
     is_dark, plot_weights, plot_top_colors, plot_hue_brightness_scatter
 )
+from st_keyup import st_keyup
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -184,38 +185,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Arrow key JS injection ────────────────────────────────────────────────────
-# We use Streamlit's session_state + a hidden text input to capture key events.
-# The JS sets the value of a hidden input, then triggers a form submit,
-# which Streamlit reads as a key press.
-ARROW_KEY_JS = """
-<script>
-(function() {
-  // Only attach once
-  if (window._arrowKeysAttached) return;
-  window._arrowKeysAttached = true;
-
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      e.preventDefault();
-
-      // Find the hidden input we set up
-      var inputs = window.parent.document.querySelectorAll('input[data-testid="stTextInput"]');
-      // Look for our sentinel input by its aria-label
-      inputs.forEach(function(inp) {
-        if (inp.getAttribute('aria-label') === '_key_press') {
-          var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-            window.HTMLInputElement.prototype, 'value').set;
-          nativeInputValueSetter.call(inp, e.key === 'ArrowLeft' ? 'left' : 'right');
-          inp.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-      });
-    }
-  });
-})();
-</script>
-"""
-
 # ── Session state ─────────────────────────────────────────────────────────────
 def init_state():
     defaults = {
@@ -227,7 +196,7 @@ def init_state():
         "round":         0,
         "phase":         "intro",
         "current_pair":  None,
-        "key_press":     "",
+        "last_key":      "",   # tracks last key so we don't double-fire
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -398,16 +367,10 @@ that maximize the joint probability of every choice you made.
 elif st.session_state.phase == "playing":
     n_done = st.session_state.round
 
-    # Inject arrow key listener
-    st.markdown(ARROW_KEY_JS, unsafe_allow_html=True)
-
-    # Hidden key input — label is our sentinel
-    key_val = st.text_input(
-        "_key_press",
-        value=st.session_state.key_press,
-        key="key_input",
-        label_visibility="collapsed",
-    )
+    # st_keyup captures keypresses reliably inside Streamlit's iframe.
+    # It renders a small invisible text input that fires on every keyup event.
+    # We hide it with CSS and only use its return value for arrow key detection.
+    key_val = st_keyup("", key="keyup_listener", label_visibility="collapsed")
 
     # Ensure a pair is ready
     if st.session_state.current_pair is None:
@@ -415,12 +378,15 @@ elif st.session_state.phase == "playing":
 
     idx_A, idx_B = st.session_state.current_pair
 
-    # Process arrow key if pressed
-    if key_val in ("left", "right"):
-        chosen = idx_A if key_val == "left" else idx_B
-        other  = idx_B if key_val == "left" else idx_A
+    # Process arrow key — guard with last_key to avoid double-firing on hold
+    if key_val in ("ArrowLeft", "ArrowRight") and key_val != st.session_state.last_key:
+        st.session_state.last_key = key_val
+        chosen = idx_A if key_val == "ArrowLeft" else idx_B
+        other  = idx_B if key_val == "ArrowLeft" else idx_A
         record_choice(chosen, other)
         st.rerun()
+    elif key_val not in ("ArrowLeft", "ArrowRight"):
+        st.session_state.last_key = ""
 
     name_A, hex_A = COLOR_NAMES[idx_A], COLOR_HEXES[idx_A]
     name_B, hex_B = COLOR_NAMES[idx_B], COLOR_HEXES[idx_B]
