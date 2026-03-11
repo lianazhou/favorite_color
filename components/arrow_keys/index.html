@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:transparent; overflow:hidden; }
+  #hint { font-family:monospace; font-size:11px; color:#555;
+          letter-spacing:0.08em; text-transform:uppercase; padding:4px 0; }
+  .key { display:inline-block; background:#1c1c1c; border:1px solid #333;
+         border-radius:3px; padding:1px 7px; color:#777; }
+</style></head>
+<body>
+<div id="hint">
+  <span class="key">←</span> left &nbsp;&nbsp;
+  <span class="key">→</span> right
+</div>
+<script src="streamlit-component-lib.js"></script>
+<script>
+(function() {
+  // setComponentValue uses window.parent.postMessage — no page reload.
+  // We attach the keydown listener to window.parent (the real browser page)
+  // so keypresses anywhere trigger it, not just when this iframe has focus.
+  var lastKey = "";
+
+  function onKey(e) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    var val = e.key === "ArrowLeft" ? "left" : "right";
+    // Only fire once per keydown (ignore key-held repeats)
+    if (e.repeat) return;
+    Streamlit.setComponentValue(val);
+  }
+
+  function onRender() {
+    // Attach to parent window — this is the actual browser tab, not the iframe.
+    // Works because Streamlit serves components from the same origin.
+    try {
+      window.parent.addEventListener("keydown", onKey);
+    } catch(err) {
+      // Fallback if cross-origin (shouldn't happen on Streamlit)
+      window.addEventListener("keydown", onKey);
+    }
+    Streamlit.setFrameHeight(28);
+  }
+
+  Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
+  Streamlit.setComponentReady();
+})();
+</script>
+</body>
+</html>

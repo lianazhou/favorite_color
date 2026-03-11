@@ -23,6 +23,12 @@ from model import (
 from utils import (
     is_dark, plot_weights, plot_top_colors, plot_hue_brightness_scatter
 )
+import streamlit.components.v1 as _components
+from pathlib import Path as _Path
+_arrow_component = _components.declare_component(
+    "arrow_keys",
+    path=str(_Path(__file__).parent / "components" / "arrow_keys")
+)
 
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -373,39 +379,14 @@ elif st.session_state.phase == "playing":
 
     idx_A, idx_B = st.session_state.current_pair
 
-    # Arrow key handling via query params.
-    # st.html() injects JS directly into the page (no iframe sandbox).
-    # When an arrow key is pressed, JS sets a query param and reloads,
-    # which Streamlit reads on the next run.
-    params = st.query_params
-    key_val = params.get("key", "")
+    # Arrow key component: attaches keydown to window.parent and sends
+    # value via postMessage — no page reload, no iframe focus needed.
+    key_val = _arrow_component(key="arrow_keys", default="")
     if key_val in ("left", "right"):
-        st.query_params.clear()
         chosen = idx_A if key_val == "left" else idx_B
         other  = idx_B if key_val == "left" else idx_A
         record_choice(chosen, other)
         st.rerun()
-
-    # Inject the key listener directly into the page DOM (not an iframe)
-    st.html("""
-<script>
-(function() {
-  if (window.__arrowKeysAttached) return;
-  window.__arrowKeysAttached = true;
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      e.preventDefault();
-      var url = new URL(window.location.href);
-      url.searchParams.set('key', e.key === 'ArrowLeft' ? 'left' : 'right');
-      window.location.href = url.toString();
-    }
-  });
-})();
-</script>
-""", unsafe_allow_javascript=True)
-
-    name_A, hex_A = COLOR_NAMES[idx_A], COLOR_HEXES[idx_A]
-    name_B, hex_B = COLOR_NAMES[idx_B], COLOR_HEXES[idx_B]
 
     # Header row
     left_head, right_head = st.columns([3, 1])
