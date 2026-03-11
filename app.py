@@ -39,31 +39,33 @@ st.markdown("""
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,800;1,9..144,300&display=swap');
 
   :root {
-    --bg:      #0d0b12;
-    --bg2:     #16121e;
-    --bg3:     #1f1928;
-    --border:  #2e2a38;
-    --border2: #3d3850;
-    --text:    #ede8f5;
-    --dim:     #7a6f90;
-    --purple:  #a78bfa;
-    --teal:    #5eead4;
-    --rose:    #fb7185;
-    --amber:   #fbbf24;
+    --bg:      #faf8f5;
+    --bg2:     #ffffff;
+    --bg3:     #f0ece6;
+    --border:  #e0d8ce;
+    --border2: #c8bdb0;
+    --text:    #1a1612;
+    --dim:     #8a7f74;
+    --purple:  #7c3aed;
+    --teal:    #0d9488;
+    --rose:    #e11d48;
+    --amber:   #d97706;
   }
 
+  /* Watercolor background: white base with soft pastel blobs */
   html, body, [class*="css"], .stApp {
     background-color: var(--bg) !important;
     color: var(--text) !important;
   }
-
-  /* Colorful muted radial background */
   .stApp {
     background:
-      radial-gradient(ellipse 90% 55% at 15% 0%,  #2d1060 0%, transparent 55%),
-      radial-gradient(ellipse 70% 45% at 85% 90%, #0b2545 0%, transparent 55%),
-      radial-gradient(ellipse 50% 35% at 75% 15%, #1a0a30 0%, transparent 45%),
-      #0d0b12 !important;
+      radial-gradient(ellipse 60% 40% at 8%  12%, #fde8f080 0%, transparent 60%),
+      radial-gradient(ellipse 50% 35% at 92% 10%, #dbeafe80 0%, transparent 55%),
+      radial-gradient(ellipse 45% 30% at 15% 88%, #d1fae580 0%, transparent 55%),
+      radial-gradient(ellipse 55% 38% at 88% 85%, #fef3c780 0%, transparent 55%),
+      radial-gradient(ellipse 35% 25% at 50% 45%, #ede9fe60 0%, transparent 50%),
+      radial-gradient(ellipse 40% 28% at 72% 52%, #fce7f360 0%, transparent 50%),
+      #faf8f5 !important;
   }
 
   /* Typography */
@@ -95,27 +97,27 @@ st.markdown("""
   [data-testid="stProgressBar"] > div {
     background: var(--border) !important;
     border-radius: 2px !important;
-    height: 2px !important;
+    height: 3px !important;
   }
 
   /* Buttons */
   .stButton > button {
-    background: var(--bg2) !important;
+    background: white !important;
     border: 1px solid var(--border) !important;
     color: var(--text) !important;
     font-family: 'DM Mono', monospace !important;
-    font-size: 0.78rem !important;
+    font-size: 0.76rem !important;
     letter-spacing: 0.05em !important;
     text-transform: uppercase !important;
     padding: 0.55rem 1.4rem !important;
-    border-radius: 4px !important;
+    border-radius: 6px !important;
     transition: all 0.15s ease !important;
-    width: auto !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
   }
   .stButton > button:hover {
     background: var(--bg3) !important;
-    border-color: #555 !important;
-    color: #fff !important;
+    border-color: var(--border2) !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.10) !important;
   }
 
   /* Wide choice buttons */
@@ -123,20 +125,21 @@ st.markdown("""
     width: 100% !important;
     padding: 0.6rem !important;
     font-size: 0.7rem !important;
-    border-radius: 0 0 6px 6px !important;
+    border-radius: 0 0 8px 8px !important;
     border-top: none !important;
   }
 
   /* Metric cards */
   [data-testid="stMetric"] {
-    background: var(--bg2) !important;
+    background: white !important;
     border: 1px solid var(--border) !important;
-    border-radius: 6px !important;
+    border-radius: 8px !important;
     padding: 0.75rem 1rem !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
   }
   [data-testid="stMetricLabel"] {
     font-family: 'DM Mono', monospace !important;
-    font-size: 0.65rem !important;
+    font-size: 0.62rem !important;
     text-transform: uppercase !important;
     letter-spacing: 0.1em !important;
     color: var(--dim) !important;
@@ -150,26 +153,27 @@ st.markdown("""
   /* Tabs */
   [data-testid="stTabs"] button {
     font-family: 'DM Mono', monospace !important;
-    font-size: 0.72rem !important;
+    font-size: 0.7rem !important;
     text-transform: uppercase !important;
     letter-spacing: 0.08em !important;
     color: var(--dim) !important;
   }
   [data-testid="stTabs"] button[aria-selected="true"] {
-    color: var(--text) !important;
-    border-bottom-color: var(--text) !important;
+    color: var(--purple) !important;
+    border-bottom-color: var(--purple) !important;
   }
 
   /* Expander — fix arrow/text overlap */
   [data-testid="stExpander"] {
     border: 1px solid var(--border) !important;
     border-radius: 8px !important;
-    background: var(--bg2) !important;
+    background: white !important;
     overflow: hidden !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
   }
   [data-testid="stExpander"] summary {
     font-family: 'DM Mono', monospace !important;
-    font-size: 0.72rem !important;
+    font-size: 0.7rem !important;
     text-transform: uppercase !important;
     letter-spacing: 0.08em !important;
     color: var(--dim) !important;
@@ -233,7 +237,7 @@ def init_state():
         "round":         0,
         "phase":         "intro",
         "current_pair":  None,
-        "key_press":     "",
+        "just_picked":   None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -385,80 +389,40 @@ if st.session_state.phase == "intro":
     st.markdown("<hr>", unsafe_allow_html=True)
 
     st.markdown("""
-    <div style="font-family:'DM Mono',monospace;font-size:0.8rem;line-height:1.85;
-                color:#b8b0cc;max-width:600px;margin-bottom:1rem;">
-      Each color pair you judge is modeled as a
-      <span style="color:var(--teal);font-weight:500;">Bernoulli trial</span>
-      — a binary outcome with probability defined by a logistic function:
+    <div style="font-family:'DM Mono',monospace;font-size:0.82rem;line-height:1.9;
+                color:#4a4035;max-width:580px;margin-bottom:1.4rem;">
+      Pick between 30 pairs of colors. Each choice is a
+      <span style="color:var(--teal);font-weight:500;background:#d1fae540;
+                   padding:1px 5px;border-radius:3px;">Bernoulli trial</span>
+      &mdash; the model treats it as a binary outcome driven by your latent preferences.<br><br>
+      After all 30 rounds, a
+      <span style="color:var(--purple);font-weight:500;background:#ede9fe40;
+                   padding:1px 5px;border-radius:3px;">logistic regression</span>
+      weight vector is fit using
+      <span style="color:var(--amber);font-weight:500;background:#fef3c740;
+                   padding:1px 5px;border-radius:3px;">Maximum Likelihood Estimation</span>
+      via
+      <span style="color:var(--rose);font-weight:500;background:#fce7f340;
+                   padding:1px 5px;border-radius:3px;">gradient ascent</span>
+      (Adam optimizer, 600 steps/round, L2-regularized).<br><br>
+      The learned weights score all 121 candidate colors &mdash; argmax wins.
+      Check out the <b>math analysis</b> dropdown after the test to see
+      the full MLE objective, gradient derivation, and Adam update rule.
     </div>
     """, unsafe_allow_html=True)
 
     st.markdown("""
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;
-                padding:1.1rem 1.4rem;margin:0 0 1.2rem;font-family:'DM Mono',monospace;
-                font-size:0.78rem;color:#c4bedd;line-height:2.2;">
-      <span style="color:var(--teal);">P</span>(prefer A over B &nbsp;|&nbsp; <b>w</b>)
-      &nbsp;=&nbsp;
-      <span style="color:var(--purple);">&sigma;</span>(
-        <b>w</b> &middot; (x<sub>A</sub> &minus; x<sub>B</sub>) )
-      <br>
-      <span style="color:var(--dim);font-size:0.67rem;">
-        x encodes hue, saturation, brightness, warmth, chroma + 3 more features
-      </span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div style="font-family:'DM Mono',monospace;font-size:0.8rem;line-height:1.85;
-                color:#b8b0cc;max-width:600px;margin-bottom:1rem;">
-      Your 30 choices define a dataset of i.i.d. Bernoulli observations.
-      The weight vector <b>w</b> is fit by
-      <span style="color:var(--amber);font-weight:500;">Maximum Likelihood Estimation</span>
-      — minimizing the negative log-likelihood via
-      <span style="color:var(--rose);font-weight:500;">Adam</span>
-      (adaptive gradient descent with per-parameter momentum):
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;
-                padding:1.1rem 1.4rem;margin:0 0 1.2rem;font-family:'DM Mono',monospace;
-                font-size:0.78rem;color:#c4bedd;line-height:2.3;">
-      <b>&#373;</b> &nbsp;=&nbsp; argmin &nbsp;&minus;&sum;
-        [y<sub>i</sub> log p<sub>i</sub> + (1&minus;y<sub>i</sub>) log(1&minus;p<sub>i</sub>)]
-        &nbsp;+&nbsp; &lambda;&#8214;<b>w</b>&#8214;&sup2;
-      <br>
-      &nabla;L(<b>w</b>) &nbsp;=&nbsp;
-        &sum; (p<sub>i</sub> &minus; y<sub>i</sub>)
-              (x<sub>A<sub>i</sub></sub> &minus; x<sub>B<sub>i</sub></sub>)
-        &nbsp;+&nbsp; 2&lambda;<b>w</b>
-      <br>
-      <span style="color:var(--dim);font-size:0.67rem;">
-        L2 regularization prevents weight explosion under sparse observations
-      </span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div style="font-family:'DM Mono',monospace;font-size:0.8rem;line-height:1.85;
-                color:#b8b0cc;max-width:600px;margin-bottom:1.6rem;">
-      Final prediction: score all 121 colors as <b>w</b> &middot; x, pick argmax.
-      Check out the <b>math analysis</b> dropdown after the test to inspect
-      learned weights and the full Adam update derivation.
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+    <div style="background:white;border:1px solid var(--border);border-radius:8px;
                 padding:0.9rem 1.2rem;margin-bottom:1.8rem;
-                font-size:0.72rem;color:var(--dim);">
+                font-size:0.72rem;color:var(--dim);
+                box-shadow:0 1px 4px rgba(0,0,0,0.05);">
       Press
       <span style="background:var(--bg3);border:1px solid var(--border2);
-                   border-radius:3px;padding:1px 7px;color:#aaa;">&larr;</span>
+                   border-radius:3px;padding:1px 7px;color:#555;">&larr;</span>
       and
       <span style="background:var(--bg3);border:1px solid var(--border2);
-                   border-radius:3px;padding:1px 7px;color:#aaa;">&rarr;</span>
-      to choose, or click the buttons below each color.
+                   border-radius:3px;padding:1px 7px;color:#555;">&rarr;</span>
+      to choose with keyboard, or click the buttons below each color.
     </div>
     """, unsafe_allow_html=True)
 
@@ -561,7 +525,7 @@ elif st.session_state.phase == "playing":
     with gap:
         st.markdown(
             '<div style="display:flex;align-items:center;justify-content:center;'
-            'height:200px;color:#333;font-size:0.75rem;font-family:\'DM Mono\','
+            'height:200px;color:#bbb;font-size:0.75rem;font-family:\'DM Mono\','
             'monospace;">or</div>',
             unsafe_allow_html=True
         )
@@ -732,14 +696,31 @@ elif st.session_state.phase == "results":
         st.markdown("""
 **Pairwise preference model**
 
-Each comparison is a Bernoulli r.v. with probability set by logistic regression.
-                    
+Each comparison is a Bernoulli r.v. with probability set by logistic regression:
+
+```
+P(choose A | w) = σ( w · (x_A − x_B) )     σ(z) = 1 / (1 + e^{−z})
+```
+
 **MLE objective (regularized negative log-likelihood)**
+
+```
+ŵ = argmin  −∑ᵢ [yᵢ log pᵢ + (1−yᵢ) log(1−pᵢ)]  +  λ‖w‖²
+```
 
 **Gradient used in each Adam step**
 
+```
+∇L(w) = (1/n) ∑ᵢ (pᵢ − yᵢ)(x_Aᵢ − x_Bᵢ)  +  2λw
+```
+
 **Adam update rule** (adaptive moment estimation, 600 steps per round)
 
+```
+m ← β₁m + (1−β₁)∇         first moment  (momentum)
+v ← β₂v + (1−β₂)∇²        second moment (per-feature learning rate)
+w ← w − α · m̂ / (√v̂ + ε)  bias-corrected parameter update
+```
 
 **Scoring & prediction:** `score(c) = ŵ · x_c` for all 121 colors → argmax.  
 Softmax over raw scores yields the probability distribution shown above.
