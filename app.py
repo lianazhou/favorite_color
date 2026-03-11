@@ -52,20 +52,22 @@ st.markdown("""
     --amber:   #d97706;
   }
 
-  /* Watercolor background: white base with soft pastel blobs */
+  /* Soft multicolored gradient */
   html, body, [class*="css"], .stApp {
     background-color: var(--bg) !important;
     color: var(--text) !important;
   }
   .stApp {
-    background:
-      radial-gradient(ellipse 60% 40% at 8%  12%, #fde8f080 0%, transparent 60%),
-      radial-gradient(ellipse 50% 35% at 92% 10%, #dbeafe80 0%, transparent 55%),
-      radial-gradient(ellipse 45% 30% at 15% 88%, #d1fae580 0%, transparent 55%),
-      radial-gradient(ellipse 55% 38% at 88% 85%, #fef3c780 0%, transparent 55%),
-      radial-gradient(ellipse 35% 25% at 50% 45%, #ede9fe60 0%, transparent 50%),
-      radial-gradient(ellipse 40% 28% at 72% 52%, #fce7f360 0%, transparent 50%),
-      #faf8f5 !important;
+    background: linear-gradient(
+      135deg,
+      #f9c5d1 0%,
+      #fddcaa 20%,
+      #b8f0d8 38%,
+      #b8d8f8 56%,
+      #d8b8f8 76%,
+      #f9c5d1 100%
+    ) !important;
+    background-attachment: fixed !important;
   }
 
   /* Typography */
@@ -203,6 +205,19 @@ st.markdown("""
     padding: 0.2rem 1.1rem 1.1rem !important;
   }
 
+  /* Swatch selected highlight ring */
+  .swatch-wrap { position: relative; transition: transform 0.15s ease; }
+  .swatch-wrap.selected { transform: scale(1.02); }
+  .swatch-wrap.selected::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 12px 12px 0 0;
+    border: 3px solid rgba(0,0,0,0.85);
+    pointer-events: none;
+    z-index: 10;
+  }
+
   /* Divider */
   hr {
     border: none !important;
@@ -238,6 +253,7 @@ def init_state():
         "phase":         "intro",
         "current_pair":  None,
         "just_picked":   None,
+        "pending_choice": None,  # (chosen_idx, other_idx) waiting for highlight pause
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -289,7 +305,8 @@ def pick_pair() -> tuple[int, int]:
 
 # ── Color swatch HTML ─────────────────────────────────────────────────────────
 
-def swatch_html(hex_code: str, name: str, key_label: str = "") -> str:
+def swatch_html(hex_code: str, name: str, key_label: str = "", state: str = "normal") -> str:
+    """state: 'normal' | 'chosen' | 'dimmed'"""
     text_color = "#ffffff" if is_dark(hex_code) else "#111111"
     key_badge = (
         f'<div style="position:absolute;top:10px;right:12px;'
@@ -298,6 +315,13 @@ def swatch_html(hex_code: str, name: str, key_label: str = "") -> str:
         f'color:{text_color}88;letter-spacing:0.05em;">{key_label}</div>'
         if key_label else ""
     )
+    check = (
+        '<div style="position:absolute;top:10px;left:12px;background:rgba(255,255,255,0.92);'
+        'border-radius:50%;width:24px;height:24px;display:flex;align-items:center;'
+        'justify-content:center;font-size:14px;color:#111;">&#10003;</div>'
+    ) if state == "chosen" else ""
+    outline = "outline:4px solid rgba(0,0,0,0.85);outline-offset:2px;" if state == "chosen" else ""
+    opacity = "opacity:0.3;filter:grayscale(70%);" if state == "dimmed" else ""
     return f"""
     <div style="
         position:relative;
@@ -310,8 +334,9 @@ def swatch_html(hex_code: str, name: str, key_label: str = "") -> str:
         justify-content:center;
         box-shadow: 0 6px 30px {hex_code}40;
         user-select:none;
+        {outline}{opacity}
     ">
-      {key_badge}
+      {key_badge}{check}
       <div style="
         font-family:'Fraunces',serif;
         font-size:1.05rem;
@@ -359,7 +384,7 @@ def record_choice(chosen_idx: int, other_idx: int):
 
 def do_restart():
     for key in ["comparisons", "pairs_shown", "weights", "adam_m", "adam_v",
-                "round", "phase", "current_pair", "just_picked"]:
+                "round", "phase", "current_pair", "just_picked", "pending_choice"]:
         if key in st.session_state:
             del st.session_state[key]
 
@@ -448,96 +473,152 @@ elif st.session_state.phase == "playing":
     name_A, hex_A = COLOR_NAMES[idx_A], COLOR_HEXES[idx_A]
     name_B, hex_B = COLOR_NAMES[idx_B], COLOR_HEXES[idx_B]
 
-    # Arrow keys: find visible .stButton buttons in parent DOM, click [0] or [1]
-    _components.html("""
+    pending = st.session_state.pending_choice  # (chosen_idx, other_idx) or None
+
+    # ── If we're in the "highlight" phase, commit the choice ─────────────────
+    # A hidden button is clicked by JS after 500ms to advance.
+    if pending is not None:
+        # Render same pair with highlight, then JS auto-clicks the confirm button
+        state_A = "chosen" if pending[0] == idx_A else "dimmed"
+        state_B = "chosen" if pending[0] == idx_B else "dimmed"
+
+        left_head, right_head = st.columns([3, 1])
+        with left_head:
+            st.markdown(
+                f'<p style="font-family:\'DM Mono\',monospace;font-size:0.7rem;'
+                f'letter-spacing:0.08em;text-transform:uppercase;color:#888;">'
+                f'Round {n_done + 1} of {N_ROUNDS}</p>',
+                unsafe_allow_html=True
+            )
+        with right_head:
+            pct = int(n_done / N_ROUNDS * 100)
+            st.markdown(
+                f'<p style="font-family:\'DM Mono\',monospace;font-size:0.7rem;'
+                f'color:#999;text-align:right;">{pct}%</p>',
+                unsafe_allow_html=True
+            )
+        st.progress(n_done / N_ROUNDS)
+        st.markdown(
+            '<p style="font-family:\'Fraunces\',serif;font-size:1.25rem;'
+            'font-weight:600;margin:1.4rem 0 1rem;letter-spacing:-0.01em;">'
+            'Which color do you prefer?</p>',
+            unsafe_allow_html=True
+        )
+
+        col_a, gap, col_b = st.columns([10, 1, 10])
+        with col_a:
+            st.markdown(swatch_html(hex_A, name_A, key_label="← left", state=state_A), unsafe_allow_html=True)
+        with gap:
+            st.markdown(
+                '<div style="display:flex;align-items:center;justify-content:center;'
+                'height:200px;color:#bbb;font-size:0.75rem;font-family:\'DM Mono\','
+                'monospace;">or</div>',
+                unsafe_allow_html=True
+            )
+        with col_b:
+            st.markdown(swatch_html(hex_B, name_B, key_label="right →", state=state_B), unsafe_allow_html=True)
+
+        # Hidden confirm button — JS clicks it after 500ms
+        confirm_col = st.columns([1, 1, 1])
+        with confirm_col[1]:
+            st.markdown('<div style="display:none" id="confirm-wrap">', unsafe_allow_html=True)
+            if st.button("confirm", key="btn_confirm"):
+                chosen, other = st.session_state.pending_choice
+                st.session_state.pending_choice = None
+                record_choice(chosen, other)
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # JS: auto-click confirm after 500ms, expose it briefly for the click
+        _components.html("""
+<script>
+(function() {
+  var par = window.parent.document;
+  // Unhide the confirm button, click it after 500ms
+  var wrap = par.getElementById('confirm-wrap');
+  if (wrap) wrap.style.display = 'block';
+  setTimeout(function() {
+    var btn = par.querySelector('#confirm-wrap button');
+    if (btn) btn.click();
+  }, 500);
+})();
+</script>""", height=0)
+
+    else:
+        # ── Normal state: show pair, listen for keys/clicks ───────────────────
+
+        # Arrow keys: set pending_choice then rerun to show highlight frame
+        _components.html("""
 <script>
 (function() {
   var par = window.parent.document;
   if (par.__arrowKeysReady) return;
   par.__arrowKeysReady = true;
+
   par.addEventListener('keydown', function(e) {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
+    var isLeft = e.key === 'ArrowLeft';
+    // Click btn_a or btn_b to set pending via Streamlit button handler
     var btns = Array.from(par.querySelectorAll('.stButton > button'))
                     .filter(function(b) { return b.offsetParent !== null; });
-    var idx = e.key === 'ArrowLeft' ? 0 : 1;
+    var idx = isLeft ? 0 : 1;
     if (btns[idx]) btns[idx].click();
   });
 })();
 </script>""", height=0)
 
-    # Selection feedback banner (shows color chosen in previous round)
-    if st.session_state.just_picked is not None:
-        jp_idx  = st.session_state.just_picked
-        jp_name = COLOR_NAMES[jp_idx]
-        jp_hex  = COLOR_HEXES[jp_idx]
-        jp_tc   = "#fff" if is_dark(jp_hex) else "#111"
-        st.markdown(f"""
-        <div style="background:{jp_hex}1a;border:1px solid {jp_hex}55;border-radius:6px;
-                    padding:0.55rem 1rem;margin-bottom:0.6rem;
-                    font-family:'DM Mono',monospace;font-size:0.7rem;color:{jp_hex};
-                    display:flex;align-items:center;gap:0.6rem;">
-          <span style="background:{jp_hex};color:{jp_tc};border-radius:50%;
-                       width:18px;height:18px;display:inline-flex;align-items:center;
-                       justify-content:center;font-size:11px;flex-shrink:0;">&#10003;</span>
-          You chose &nbsp;<b>{jp_name}</b>
-        </div>""", unsafe_allow_html=True)
-        st.session_state.just_picked = None
+        left_head, right_head = st.columns([3, 1])
+        with left_head:
+            st.markdown(
+                f'<p style="font-family:\'DM Mono\',monospace;font-size:0.7rem;'
+                f'letter-spacing:0.08em;text-transform:uppercase;color:#888;">'
+                f'Round {n_done + 1} of {N_ROUNDS}</p>',
+                unsafe_allow_html=True
+            )
+        with right_head:
+            pct = int(n_done / N_ROUNDS * 100)
+            st.markdown(
+                f'<p style="font-family:\'DM Mono\',monospace;font-size:0.7rem;'
+                f'color:#999;text-align:right;">{pct}%</p>',
+                unsafe_allow_html=True
+            )
 
-    # Header row
-    left_head, right_head = st.columns([3, 1])
-    with left_head:
+        st.progress(n_done / N_ROUNDS)
         st.markdown(
-            f'<p style="font-family:\'DM Mono\',monospace;font-size:0.7rem;'
-            f'letter-spacing:0.08em;text-transform:uppercase;color:#555;">'
-            f'Round {n_done + 1} of {N_ROUNDS}</p>',
-            unsafe_allow_html=True
-        )
-    with right_head:
-        pct = int(n_done / N_ROUNDS * 100)
-        st.markdown(
-            f'<p style="font-family:\'DM Mono\',monospace;font-size:0.7rem;'
-            f'color:#444;text-align:right;">{pct}%</p>',
+            '<p style="font-family:\'Fraunces\',serif;font-size:1.25rem;'
+            'font-weight:600;margin:1.4rem 0 1rem;letter-spacing:-0.01em;">'
+            'Which color do you prefer?</p>',
             unsafe_allow_html=True
         )
 
-    st.progress(n_done / N_ROUNDS)
+        col_a, gap, col_b = st.columns([10, 1, 10])
 
-    st.markdown(
-        '<p style="font-family:\'Fraunces\',serif;font-size:1.25rem;'
-        'font-weight:600;margin:1.4rem 0 1rem;letter-spacing:-0.01em;">'
-        'Which color do you prefer?</p>',
-        unsafe_allow_html=True
-    )
+        with col_a:
+            st.markdown(swatch_html(hex_A, name_A, key_label="← left"), unsafe_allow_html=True)
+            with st.container():
+                st.markdown('<div class="choice-btn">', unsafe_allow_html=True)
+                if st.button(name_A, key="btn_a", use_container_width=True):
+                    st.session_state.pending_choice = (idx_A, idx_B)
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
-    # Swatch columns
-    col_a, gap, col_b = st.columns([10, 1, 10])
+        with gap:
+            st.markdown(
+                '<div style="display:flex;align-items:center;justify-content:center;'
+                'height:200px;color:#bbb;font-size:0.75rem;font-family:\'DM Mono\','
+                'monospace;">or</div>',
+                unsafe_allow_html=True
+            )
 
-    with col_a:
-        st.markdown(swatch_html(hex_A, name_A, key_label="← left"), unsafe_allow_html=True)
-        with st.container():
-            st.markdown('<div class="choice-btn">', unsafe_allow_html=True)
-            if st.button(name_A, key="btn_a", use_container_width=True):
-                record_choice(idx_A, idx_B)
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    with gap:
-        st.markdown(
-            '<div style="display:flex;align-items:center;justify-content:center;'
-            'height:200px;color:#bbb;font-size:0.75rem;font-family:\'DM Mono\','
-            'monospace;">or</div>',
-            unsafe_allow_html=True
-        )
-
-    with col_b:
-        st.markdown(swatch_html(hex_B, name_B, key_label="right →"), unsafe_allow_html=True)
-        with st.container():
-            st.markdown('<div class="choice-btn">', unsafe_allow_html=True)
-            if st.button(name_B, key="btn_b", use_container_width=True):
-                record_choice(idx_B, idx_A)
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+        with col_b:
+            st.markdown(swatch_html(hex_B, name_B, key_label="right →"), unsafe_allow_html=True)
+            with st.container():
+                st.markdown('<div class="choice-btn">', unsafe_allow_html=True)
+                if st.button(name_B, key="btn_b", use_container_width=True):
+                    st.session_state.pending_choice = (idx_B, idx_A)
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
     # Live model status
     if n_done >= LIVE_AFTER:
