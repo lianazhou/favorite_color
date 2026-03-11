@@ -2,100 +2,96 @@
 <html>
 <head>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { 
-    background: transparent; 
-    font-family: 'DM Mono', monospace;
-    overflow: hidden;
-  }
+  * { margin: 0; padding: 0; }
+  body { background: transparent; overflow: hidden; }
   #hint {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    padding: 6px 0;
-    opacity: 0.45;
+    font-family: monospace;
     font-size: 11px;
-    color: #888;
-    letter-spacing: 0.06em;
+    color: #555;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
+    padding: 4px 0;
   }
   .key {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 22px;
+    display: inline-block;
     background: #1c1c1c;
     border: 1px solid #333;
     border-radius: 3px;
+    padding: 1px 6px;
+    color: #888;
     font-size: 11px;
-    color: #aaa;
-  }
-  #hint.active { opacity: 1; }
-  #hint .key.pressed {
-    background: #2a2a2a;
-    border-color: #666;
-    color: #fff;
   }
 </style>
 </head>
 <body>
 <div id="hint">
-  <span class="key" id="key-left">←</span>
-  <span style="color:#555">left</span>
-  <span style="margin: 0 6px; color: #333;">·</span>
-  <span class="key" id="key-right">→</span>
-  <span style="color:#555">right</span>
+  <span class="key">←</span> left &nbsp;&nbsp;
+  <span class="key">→</span> right
 </div>
 
 <script src="streamlit-component-lib.js"></script>
 <script>
-  // Track last sent value to avoid repeat fires on key hold
-  let lastSent = null;
+// This component injects a keydown listener into the TOP-LEVEL parent window
+// (the actual browser tab), bypassing all iframe sandbox restrictions.
+// It does this by writing a <script> tag into the parent document directly,
+// which works because Streamlit serves everything from the same origin.
 
-  function sendKey(key) {
-    if (key !== lastSent) {
-      lastSent = key;
-      Streamlit.setComponentValue(key);
-    }
+(function() {
+  var lastKey = null;
+  var lastTime = 0;
+
+  function sendToStreamlit(key) {
+    var now = Date.now();
+    // Debounce: ignore if same key within 300ms (prevents held-key spam)
+    if (key === lastKey && now - lastTime < 300) return;
+    lastKey = key;
+    lastTime = now;
+    Streamlit.setComponentValue(key);
   }
 
-  function onKeyDown(e) {
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      document.getElementById('key-left').classList.add('pressed');
-      sendKey('left');
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      document.getElementById('key-right').classList.add('pressed');
-      sendKey('right');
+  function attachToParent() {
+    try {
+      // Try to attach directly to parent window (same-origin)
+      var parentDoc = window.parent.document;
+      
+      if (parentDoc.__arrowKeyListenerAttached) return;
+      parentDoc.__arrowKeyListenerAttached = true;
+
+      parentDoc.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          sendToStreamlit('left');
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          sendToStreamlit('right');
+        }
+      });
+
+    } catch(err) {
+      // Cross-origin fallback: focus this iframe and listen locally
+      window.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          sendToStreamlit('left');
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          sendToStreamlit('right');
+        }
+      });
     }
   }
-
-  function onKeyUp(e) {
-    if (e.key === 'ArrowLeft') {
-      document.getElementById('key-left').classList.remove('pressed');
-      lastSent = null;  // reset so next press fires again
-    } else if (e.key === 'ArrowRight') {
-      document.getElementById('key-right').classList.remove('pressed');
-      lastSent = null;
-    }
-  }
-
-  // Attach to the component's own window (inside the iframe)
-  window.addEventListener('keydown', onKeyDown);
-  window.addEventListener('keyup', onKeyUp);
 
   function onRender(event) {
-    // Make the component focusable and auto-focus it
-    document.body.setAttribute('tabindex', '0');
+    attachToParent();
+    // Also keep local listener as backup, auto-focus this iframe
+    document.body.setAttribute('tabindex', '-1');
     document.body.focus();
-    document.getElementById('hint').classList.add('active');
-    Streamlit.setFrameHeight(34);
+    Streamlit.setFrameHeight(28);
   }
 
   Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
   Streamlit.setComponentReady();
+})();
 </script>
 </body>
 </html>
