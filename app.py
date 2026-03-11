@@ -25,7 +25,6 @@ from utils import (
 )
 import streamlit.components.v1 as _components
 
-
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Color Preference Lab",
@@ -40,20 +39,31 @@ st.markdown("""
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,800;1,9..144,300&display=swap');
 
   :root {
-    --bg:      #0d0d0d;
-    --bg2:     #141414;
-    --bg3:     #1c1c1c;
-    --border:  #2a2a2a;
-    --text:    #e2e2da;
-    --dim:     #6b6b6b;
-    --accent:  #e2e2da;
-    --green:   #4ade80;
-    --red:     #f87171;
+    --bg:      #0d0b12;
+    --bg2:     #16121e;
+    --bg3:     #1f1928;
+    --border:  #2e2a38;
+    --border2: #3d3850;
+    --text:    #ede8f5;
+    --dim:     #7a6f90;
+    --purple:  #a78bfa;
+    --teal:    #5eead4;
+    --rose:    #fb7185;
+    --amber:   #fbbf24;
   }
 
   html, body, [class*="css"], .stApp {
     background-color: var(--bg) !important;
     color: var(--text) !important;
+  }
+
+  /* Colorful muted radial background */
+  .stApp {
+    background:
+      radial-gradient(ellipse 90% 55% at 15% 0%,  #2d1060 0%, transparent 55%),
+      radial-gradient(ellipse 70% 45% at 85% 90%, #0b2545 0%, transparent 55%),
+      radial-gradient(ellipse 50% 35% at 75% 15%, #1a0a30 0%, transparent 45%),
+      #0d0b12 !important;
   }
 
   /* Typography */
@@ -79,7 +89,7 @@ st.markdown("""
 
   /* Progress bar */
   [data-testid="stProgressBar"] > div > div {
-    background: var(--text) !important;
+    background: linear-gradient(90deg, var(--teal), var(--purple)) !important;
     border-radius: 2px !important;
   }
   [data-testid="stProgressBar"] > div {
@@ -150,18 +160,43 @@ st.markdown("""
     border-bottom-color: var(--text) !important;
   }
 
-  /* Expander */
+  /* Expander — fix arrow/text overlap */
   [data-testid="stExpander"] {
     border: 1px solid var(--border) !important;
-    border-radius: 6px !important;
+    border-radius: 8px !important;
     background: var(--bg2) !important;
+    overflow: hidden !important;
   }
   [data-testid="stExpander"] summary {
     font-family: 'DM Mono', monospace !important;
-    font-size: 0.75rem !important;
+    font-size: 0.72rem !important;
     text-transform: uppercase !important;
     letter-spacing: 0.08em !important;
     color: var(--dim) !important;
+    padding: 0.9rem 1.1rem !important;
+    list-style: none !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+  }
+  [data-testid="stExpander"] summary::marker,
+  [data-testid="stExpander"] summary::-webkit-details-marker {
+    display: none !important;
+  }
+  [data-testid="stExpander"] summary > div {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+  }
+  [data-testid="stExpander"] summary svg {
+    width: 14px !important;
+    height: 14px !important;
+    flex-shrink: 0 !important;
+    color: var(--dim) !important;
+  }
+  [data-testid="stExpanderDetails"] {
+    padding: 0.2rem 1.1rem 1.1rem !important;
   }
 
   /* Divider */
@@ -186,6 +221,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
 # ── Session state ─────────────────────────────────────────────────────────────
 def init_state():
     defaults = {
@@ -197,7 +233,7 @@ def init_state():
         "round":         0,
         "phase":         "intro",
         "current_pair":  None,
-        "last_key":      "",   # tracks last key so we don't double-fire
+        "key_press":     "",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -307,8 +343,8 @@ def record_choice(chosen_idx: int, other_idx: int):
         n_features=N_FEATURES,
     )
 
+    st.session_state.just_picked = chosen_idx   # feedback banner on next render
     st.session_state.round += 1
-    st.session_state.key_press = ""
 
     if st.session_state.round >= N_ROUNDS:
         st.session_state.phase = "results"
@@ -319,7 +355,7 @@ def record_choice(chosen_idx: int, other_idx: int):
 
 def do_restart():
     for key in ["comparisons", "pairs_shown", "weights", "adam_m", "adam_v",
-                "round", "phase", "current_pair", "key_press"]:
+                "round", "phase", "current_pair", "just_picked"]:
         if key in st.session_state:
             del st.session_state[key]
 
@@ -328,35 +364,107 @@ def do_restart():
 #  INTRO
 # ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.phase == "intro":
-    st.markdown("# Color Preference Lab")
-    st.markdown(
-        '<p style="color:#6b6b6b;font-size:0.8rem;letter-spacing:0.06em;'
-        'text-transform:uppercase;margin-top:-0.8rem;margin-bottom:2rem;">'
-        'A probability experiment</p>',
-        unsafe_allow_html=True
-    )
 
     st.markdown("""
-Choose between pairs of colors. After **30 comparisons**, a logistic regression
-model trained with maximum likelihood estimation will predict your favorite color
-and explain what it learned about your preferences.
+    <div style="margin-bottom: 0.4rem;">
+      <div style="font-family:'DM Mono',monospace;font-size:0.65rem;letter-spacing:0.14em;
+                  text-transform:uppercase;color:var(--dim);margin-bottom:0.6rem;">
+        CS109 &nbsp;·&nbsp; Probability
+      </div>
+      <div style="font-family:'Fraunces',serif;font-size:2.8rem;font-weight:800;
+                  letter-spacing:-0.03em;line-height:1.1;color:var(--text);">
+        Favorite Color<br>Predictor
+      </div>
+      <div style="font-family:'DM Mono',monospace;font-size:0.72rem;color:var(--dim);
+                  margin-top:0.7rem;letter-spacing:0.04em;">
+        Liana Zhou &nbsp;·&nbsp; 2026
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-Each click is treated as a **Bernoulli random variable**. The model fits weights
-that maximize the joint probability of every choice you made.
-""")
+    st.markdown("<hr>", unsafe_allow_html=True)
 
     st.markdown("""
-<div style="background:#141414;border:1px solid #2a2a2a;border-radius:6px;
-            padding:1.2rem 1.4rem;margin:1.5rem 0;font-size:0.78rem;color:#888;">
-  <span style="color:#e2e2da;font-weight:500;">Controls</span><br><br>
-  Use the buttons to choose, or press <span class="key-hint">&larr;</span>
-  and <span class="key-hint">&rarr;</span> arrow keys to pick left or right.
-</div>
-""", unsafe_allow_html=True)
+    <div style="font-family:'DM Mono',monospace;font-size:0.8rem;line-height:1.85;
+                color:#b8b0cc;max-width:600px;margin-bottom:1rem;">
+      Each color pair you judge is modeled as a
+      <span style="color:var(--teal);font-weight:500;">Bernoulli trial</span>
+      — a binary outcome with probability defined by a logistic function:
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+                padding:1.1rem 1.4rem;margin:0 0 1.2rem;font-family:'DM Mono',monospace;
+                font-size:0.78rem;color:#c4bedd;line-height:2.2;">
+      <span style="color:var(--teal);">P</span>(prefer A over B &nbsp;|&nbsp; <b>w</b>)
+      &nbsp;=&nbsp;
+      <span style="color:var(--purple);">&sigma;</span>(
+        <b>w</b> &middot; (x<sub>A</sub> &minus; x<sub>B</sub>) )
+      <br>
+      <span style="color:var(--dim);font-size:0.67rem;">
+        x encodes hue, saturation, brightness, warmth, chroma + 3 more features
+      </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style="font-family:'DM Mono',monospace;font-size:0.8rem;line-height:1.85;
+                color:#b8b0cc;max-width:600px;margin-bottom:1rem;">
+      Your 30 choices define a dataset of i.i.d. Bernoulli observations.
+      The weight vector <b>w</b> is fit by
+      <span style="color:var(--amber);font-weight:500;">Maximum Likelihood Estimation</span>
+      — minimizing the negative log-likelihood via
+      <span style="color:var(--rose);font-weight:500;">Adam</span>
+      (adaptive gradient descent with per-parameter momentum):
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+                padding:1.1rem 1.4rem;margin:0 0 1.2rem;font-family:'DM Mono',monospace;
+                font-size:0.78rem;color:#c4bedd;line-height:2.3;">
+      <b>&#373;</b> &nbsp;=&nbsp; argmin &nbsp;&minus;&sum;
+        [y<sub>i</sub> log p<sub>i</sub> + (1&minus;y<sub>i</sub>) log(1&minus;p<sub>i</sub>)]
+        &nbsp;+&nbsp; &lambda;&#8214;<b>w</b>&#8214;&sup2;
+      <br>
+      &nabla;L(<b>w</b>) &nbsp;=&nbsp;
+        &sum; (p<sub>i</sub> &minus; y<sub>i</sub>)
+              (x<sub>A<sub>i</sub></sub> &minus; x<sub>B<sub>i</sub></sub>)
+        &nbsp;+&nbsp; 2&lambda;<b>w</b>
+      <br>
+      <span style="color:var(--dim);font-size:0.67rem;">
+        L2 regularization prevents weight explosion under sparse observations
+      </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style="font-family:'DM Mono',monospace;font-size:0.8rem;line-height:1.85;
+                color:#b8b0cc;max-width:600px;margin-bottom:1.6rem;">
+      Final prediction: score all 121 colors as <b>w</b> &middot; x, pick argmax.
+      Check out the <b>math analysis</b> dropdown after the test to inspect
+      learned weights and the full Adam update derivation.
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+                padding:0.9rem 1.2rem;margin-bottom:1.8rem;
+                font-size:0.72rem;color:var(--dim);">
+      Press
+      <span style="background:var(--bg3);border:1px solid var(--border2);
+                   border-radius:3px;padding:1px 7px;color:#aaa;">&larr;</span>
+      and
+      <span style="background:var(--bg3);border:1px solid var(--border2);
+                   border-radius:3px;padding:1px 7px;color:#aaa;">&rarr;</span>
+      to choose, or click the buttons below each color.
+    </div>
+    """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 1.6, 1])
     with col2:
-        if st.button("Begin experiment", use_container_width=True):
+        if st.button("Begin  —  30 rounds", use_container_width=True):
             st.session_state.phase = "playing"
             st.session_state.current_pair = pick_pair()
             st.rerun()
@@ -376,10 +484,7 @@ elif st.session_state.phase == "playing":
     name_A, hex_A = COLOR_NAMES[idx_A], COLOR_HEXES[idx_A]
     name_B, hex_B = COLOR_NAMES[idx_B], COLOR_HEXES[idx_B]
 
-    # Inject JS that listens for arrow keys on the parent window and
-    # programmatically clicks the left/right Streamlit buttons.
-    # Uses allow-same-origin sandbox to access window.parent.document.
-    # btn_a and btn_b are the keys we pass to st.button below.
+    # Arrow keys: find visible .stButton buttons in parent DOM, click [0] or [1]
     _components.html("""
 <script>
 (function() {
@@ -389,27 +494,31 @@ elif st.session_state.phase == "playing":
   par.addEventListener('keydown', function(e) {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
-    // Find the choice buttons by their data-testid keys (btn_a / btn_b).
-    // Streamlit sets the key as part of the element's test id path.
-    // Fallback: find all .stButton buttons and take first two.
-    var btnA = par.querySelector('[data-testid="stBaseButton-secondary"][aria-label="btn_a"], [key="btn_a"] button');
-    var btnB = par.querySelector('[data-testid="stBaseButton-secondary"][aria-label="btn_b"], [key="btn_b"] button');
-    
-    // Most reliable fallback: all visible stButton buttons on page, take [0] and [1]
-    if (!btnA || !btnB) {
-      var all = Array.from(par.querySelectorAll('.stButton > button')).filter(function(b) {
-        return b.offsetParent !== null; // visible only
-      });
-      btnA = all[0];
-      btnB = all[1];
-    }
-    
-    if (e.key === 'ArrowLeft' && btnA) btnA.click();
-    if (e.key === 'ArrowRight' && btnB) btnB.click();
+    var btns = Array.from(par.querySelectorAll('.stButton > button'))
+                    .filter(function(b) { return b.offsetParent !== null; });
+    var idx = e.key === 'ArrowLeft' ? 0 : 1;
+    if (btns[idx]) btns[idx].click();
   });
 })();
-</script>
-""", height=0)
+</script>""", height=0)
+
+    # Selection feedback banner (shows color chosen in previous round)
+    if st.session_state.just_picked is not None:
+        jp_idx  = st.session_state.just_picked
+        jp_name = COLOR_NAMES[jp_idx]
+        jp_hex  = COLOR_HEXES[jp_idx]
+        jp_tc   = "#fff" if is_dark(jp_hex) else "#111"
+        st.markdown(f"""
+        <div style="background:{jp_hex}1a;border:1px solid {jp_hex}55;border-radius:6px;
+                    padding:0.55rem 1rem;margin-bottom:0.6rem;
+                    font-family:'DM Mono',monospace;font-size:0.7rem;color:{jp_hex};
+                    display:flex;align-items:center;gap:0.6rem;">
+          <span style="background:{jp_hex};color:{jp_tc};border-radius:50%;
+                       width:18px;height:18px;display:inline-flex;align-items:center;
+                       justify-content:center;font-size:11px;flex-shrink:0;">&#10003;</span>
+          You chose &nbsp;<b>{jp_name}</b>
+        </div>""", unsafe_allow_html=True)
+        st.session_state.just_picked = None
 
     # Header row
     left_head, right_head = st.columns([3, 1])
@@ -619,33 +728,41 @@ elif st.session_state.phase == "results":
     st.markdown("<hr>", unsafe_allow_html=True)
 
     # ── Math expander ────────────────────────────────────────────────────────
-    with st.expander("The math behind the prediction"):
+    with st.expander("Math analysis — how the prediction was made"):
         st.markdown("""
-**Model**
+**Pairwise preference model**
 
-Each pairwise comparison is a Bernoulli random variable:
-
-```
-P(choose A over B | w) = σ( w · (x_A − x_B) )
-```
-
-**Maximum Likelihood Estimation**
-
-We find **w** that maximizes the joint probability of all observed choices:
+Each comparison is a Bernoulli r.v. with probability set by logistic regression:
 
 ```
-ŵ = argmin  −∑ [ yᵢ log pᵢ + (1−yᵢ) log(1−pᵢ) ] + λ‖w‖²
+P(choose A | w) = σ( w · (x_A − x_B) )     σ(z) = 1 / (1 + e^{−z})
 ```
 
-Training uses the **Adam optimizer** (adaptive gradient descent).  
-The gradient of the loss is:
+**MLE objective (regularized negative log-likelihood)**
 
 ```
-∇L(w) = ∑ (pᵢ − yᵢ)(x_Aᵢ − x_Bᵢ)  +  2λw
+ŵ = argmin  −∑ᵢ [yᵢ log pᵢ + (1−yᵢ) log(1−pᵢ)]  +  λ‖w‖²
 ```
 
-**Final prediction:** score every candidate as `w · x` and rank descending.  
-Softmax converts raw scores to probabilities.
+**Gradient used in each Adam step**
+
+```
+∇L(w) = (1/n) ∑ᵢ (pᵢ − yᵢ)(x_Aᵢ − x_Bᵢ)  +  2λw
+```
+
+**Adam update rule** (adaptive moment estimation, 600 steps per round)
+
+```
+m ← β₁m + (1−β₁)∇         first moment  (momentum)
+v ← β₂v + (1−β₂)∇²        second moment (per-feature learning rate)
+w ← w − α · m̂ / (√v̂ + ε)  bias-corrected parameter update
+```
+
+**Scoring & prediction:** `score(c) = ŵ · x_c` for all 121 colors → argmax.  
+Softmax over raw scores yields the probability distribution shown above.
+
+**Feature vector x** (8 dims, all normalized to [0, 1])  
+hue · saturation · brightness · warmth · colorfulness · chroma · blue_bias · red_bias
 """)
 
     # ── Restart ──────────────────────────────────────────────────────────────
