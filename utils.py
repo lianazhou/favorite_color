@@ -144,8 +144,8 @@ def plot_hue_brightness_scatter(
     hues   = features[:, 0]
     bright = features[:, 2]
 
-    if scores is not None and scores.ptp() > 1e-9:
-        sizes = 40 + 200 * (scores - scores.min()) / scores.ptp()
+    if scores is not None and scores.max() - scores.min() > 1e-9:
+        sizes = 40 + 200 * (scores - scores.min()) / (scores.max() - scores.min())
     else:
         sizes = np.full(len(names), 80)
 
