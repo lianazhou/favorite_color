@@ -1,165 +1,149 @@
 """
-model.py - Probabilistic pairwise preference model.
+model.py - Probabilistic pairwise preference model with improved accuracy.
 
-Math overview (CS109 level):
-  - Each time the user picks color A over color B, we treat that as a
-    Bernoulli trial with success probability p = sigmoid(w · (x_A - x_B)).
-  - w is a weight vector we want to learn; x_A, x_B are feature vectors.
-  - We collect many such (A, B, outcome) observations and find the weights w
-    that maximize the likelihood of all observed choices — that's MLE.
-  - Maximizing likelihood = minimizing negative log-likelihood (NLL):
-      L(w) = -∑ [ y·log(p) + (1-y)·log(1-p) ]
-    where y=1 if A was chosen, y=0 if B was chosen.
-  - We minimize L(w) with plain gradient descent.
+Improvements over v1:
+  - Adam optimizer for faster, more stable convergence
+  - Proper L2 regularization (not ad-hoc weight decay)
+  - 8-feature vector for richer discrimination
+  - Informativeness-based pair selection helper
+  - Softmax-based probability scores for final ranking
 """
 
 import numpy as np
 
 
-# ── Sigmoid ──────────────────────────────────────────────────────────────────
+# ── Sigmoid ───────────────────────────────────────────────────────────────────
 
-def sigmoid(z: np.ndarray | float) -> np.ndarray | float:
-    """
-    sigmoid(z) = 1 / (1 + exp(-z))
-
-    Numerically stable version: clamp z to avoid exp overflow.
-    """
-    z = np.clip(z, -500, 500)
+def sigmoid(z):
+    """Numerically stable sigmoid."""
+    z = np.clip(z, -50, 50)
     return 1.0 / (1.0 + np.exp(-z))
 
 
 # ── Preference probability ────────────────────────────────────────────────────
 
 def pref_prob(w: np.ndarray, x_A: np.ndarray, x_B: np.ndarray) -> float:
-    """
-    P(user chooses A over B | w) = sigmoid(w · (x_A - x_B))
-
-    Interpretation:
-      - If w·(x_A - x_B) >> 0, model is very confident the user picks A.
-      - If w·(x_A - x_B) ≈ 0, it's a coin flip.
-      - If w·(x_A - x_B) << 0, model expects the user picks B.
-    """
-    score = np.dot(w, x_A - x_B)
-    return float(sigmoid(score))
+    """P(user chooses A over B | w) = sigmoid(w · (x_A - x_B))"""
+    return float(sigmoid(np.dot(w, x_A - x_B)))
 
 
-# ── Negative log-likelihood ───────────────────────────────────────────────────
+# ── NLL and gradient ─────────────────────────────────────────────────────────
 
 def neg_log_likelihood(
     w: np.ndarray,
-    comparisons: list[tuple[np.ndarray, np.ndarray, int]]
+    comparisons: list,
+    l2_lambda: float = 0.01
 ) -> float:
     """
-    NLL(w) = -∑ [ y·log(p) + (1-y)·log(1-p) ]
+    NLL with L2 regularization:
+      L(w) = -∑[y log p + (1-y) log(1-p)] + λ||w||²
 
-    Each comparison is (x_A, x_B, y):
-      y = 1  → user chose A
-      y = 0  → user chose B (i.e., chose "not A")
+    L2 regularization prevents weights from growing unboundedly with few
+    observations, which would make predictions overconfident.
     """
-    eps = 1e-9  # prevents log(0)
+    eps = 1e-9
     total = 0.0
     for x_A, x_B, y in comparisons:
-        p = pref_prob(w, x_A, x_B)
-        p = np.clip(p, eps, 1 - eps)
+        p = float(np.clip(pref_prob(w, x_A, x_B), eps, 1 - eps))
         total -= y * np.log(p) + (1 - y) * np.log(1 - p)
+    total += l2_lambda * float(np.dot(w, w))
     return total
 
 
-# ── Gradient of NLL ──────────────────────────────────────────────────────────
-
 def grad_nll(
     w: np.ndarray,
-    comparisons: list[tuple[np.ndarray, np.ndarray, int]]
+    comparisons: list,
+    l2_lambda: float = 0.01
 ) -> np.ndarray:
     """
-    Gradient of NLL with respect to w.
-
-    For each comparison (x_A, x_B, y):
-      p     = sigmoid(w · (x_A - x_B))
-      error = p - y          (prediction minus truth)
-      grad  = error · (x_A - x_B)   (chain rule through sigmoid)
-
-    So the full gradient is:
-      ∇L(w) = ∑ (p_i - y_i) · (x_A_i - x_B_i)
-
-    Intuition: if the model over-predicted (p > y), we push w in the direction
-    that lowers scores for the chosen color's features.
+    Gradient of regularized NLL:
+      ∇L(w) = ∑(pᵢ - yᵢ)(x_Aᵢ - x_Bᵢ) + 2λw
     """
-    grad = np.zeros_like(w)
+    grad = np.zeros_like(w, dtype=np.float64)
     for x_A, x_B, y in comparisons:
         p = pref_prob(w, x_A, x_B)
-        error = p - y
-        grad += error * (x_A - x_B)
+        grad += (p - y) * (x_A - x_B)
+    grad += 2.0 * l2_lambda * w   # L2 regularization gradient
     return grad
 
 
-# ── Training loop (MLE via gradient descent) ─────────────────────────────────
+# ── Adam optimizer ────────────────────────────────────────────────────────────
 
 def train(
-    comparisons: list[tuple[np.ndarray, np.ndarray, int]],
-    n_steps: int = 200,
-    learning_rate: float = 0.1,
+    comparisons: list,
+    n_steps: int = 500,
+    learning_rate: float = 0.05,
+    l2_lambda: float = 0.02,
     w_init: np.ndarray | None = None,
-    n_features: int = 5,
+    n_features: int = 8,
 ) -> np.ndarray:
     """
-    Find weights w that maximize likelihood of observed comparisons.
+    Maximize likelihood of observed pairwise comparisons using Adam optimizer.
 
-    This is MLE: we want w* = argmax P(data | w)
-                            = argmin NLL(w)
+    Adam (Adaptive Moment Estimation) is gradient descent with:
+      - m: running average of gradients (momentum)
+      - v: running average of squared gradients (adapts per-feature lr)
 
-    Algorithm (gradient descent):
-      1. Start with w = 0 (or small random values).
-      2. For each step:
-           a. Compute gradient ∇L(w)  — how NLL changes w.r.t. each weight
-           b. Move w in the downhill direction: w ← w - η · ∇L(w)
-      3. After n_steps, return w.
+    Update rule:
+      m ← β₁m + (1-β₁)∇       # momentum
+      v ← β₂v + (1-β₂)∇²      # RMS scaling
+      w ← w - α · m̂ / (√v̂ + ε) # bias-corrected update
 
-    With enough data and steps, w converges to the MLE solution.
+    This converges faster and more reliably than vanilla gradient descent,
+    especially with a small number of training examples.
 
     Parameters:
-      comparisons   : list of (x_A, x_B, y) tuples
-      n_steps       : number of gradient descent iterations
-      learning_rate : step size η (too large → oscillates; too small → slow)
-      w_init        : optional starting weights (warm-start from previous fit)
-      n_features    : dimension of w
-
-    Returns:
-      w : learned weight vector (shape [n_features])
+      l2_lambda  : regularization strength (higher = more conservative weights)
     """
     if not comparisons:
         return np.zeros(n_features)
 
-    # Initialize weights
-    if w_init is not None:
-        w = w_init.copy()
-    else:
-        w = np.zeros(n_features)
+    w = w_init.copy() if w_init is not None else np.zeros(n_features)
 
-    # Gradient descent loop
-    for step in range(n_steps):
-        grad = grad_nll(w, comparisons)
-        w = w - learning_rate * grad   # take a downhill step
+    # Adam hyperparameters
+    beta1, beta2, eps_adam = 0.9, 0.999, 1e-8
+    m = np.zeros_like(w)
+    v = np.zeros_like(w)
 
-        # Optional: small L2 regularization to keep weights from exploding
-        # when data is sparse (prevents overconfident predictions early on)
-        w = w * 0.999
+    n = len(comparisons)
+
+    for t in range(1, n_steps + 1):
+        grad = grad_nll(w, comparisons, l2_lambda) / n  # normalize by n
+
+        # Adam moment updates
+        m = beta1 * m + (1 - beta1) * grad
+        v = beta2 * v + (1 - beta2) * grad ** 2
+
+        # Bias correction
+        m_hat = m / (1 - beta1 ** t)
+        v_hat = v / (1 - beta2 ** t)
+
+        w = w - learning_rate * m_hat / (np.sqrt(v_hat) + eps_adam)
 
     return w
 
 
-# ── Scoring and prediction ────────────────────────────────────────────────────
+# ── Scoring ───────────────────────────────────────────────────────────────────
 
 def score_colors(w: np.ndarray, color_features: np.ndarray) -> np.ndarray:
     """
-    Score every candidate color with the learned weight vector.
-
-    score(color_i) = w · x_i
-
-    Higher score = model predicts user prefers this color.
-    This is the linear "utility" the model assigns to each color.
+    Raw linear scores: score(c) = w · x_c.
+    Higher = model predicts user prefers this color.
     """
-    return color_features @ w   # shape (N,)
+    return color_features @ w
+
+
+def softmax_scores(w: np.ndarray, color_features: np.ndarray) -> np.ndarray:
+    """
+    Convert raw scores to a proper probability distribution via softmax.
+    Useful for displaying "% likelihood this is your favorite."
+
+    softmax(s)ᵢ = exp(sᵢ) / ∑ exp(sⱼ)
+    """
+    s = score_colors(w, color_features)
+    s = s - s.max()   # numerical stability
+    exp_s = np.exp(s)
+    return exp_s / exp_s.sum()
 
 
 def top_k_colors(
@@ -167,30 +151,44 @@ def top_k_colors(
     color_features: np.ndarray,
     color_names: list[str],
     k: int = 5
-) -> list[tuple[str, float]]:
-    """Return the top-k colors by score as [(name, score), ...]."""
-    scores = score_colors(w, color_features)
-    ranked = np.argsort(scores)[::-1]   # descending
-    return [(color_names[i], float(scores[i])) for i in ranked[:k]]
+) -> list[tuple[str, float, float]]:
+    """
+    Return top-k colors as [(name, raw_score, softmax_prob), ...].
+    """
+    raw = score_colors(w, color_features)
+    probs = softmax_scores(w, color_features)
+    ranked = np.argsort(raw)[::-1]
+    return [(color_names[i], float(raw[i]), float(probs[i])) for i in ranked[:k]]
+
+
+# ── Informativeness (for pair selection) ─────────────────────────────────────
+
+def pair_informativeness(
+    w: np.ndarray,
+    x_A: np.ndarray,
+    x_B: np.ndarray
+) -> float:
+    """
+    A comparison is most informative when the model is uncertain (p ≈ 0.5).
+    Informativeness = 1 - |2p - 1|  →  max 1.0 when p=0.5, min 0.0 when p=0 or 1.
+
+    Used for active learning: prefer pairs where the model is confused.
+    """
+    p = pref_prob(w, x_A, x_B)
+    return 1.0 - abs(2 * p - 1)
 
 
 # ── Natural-language preference summary ──────────────────────────────────────
 
 def preference_summary(w: np.ndarray, feature_names: list[str]) -> list[str]:
     """
-    Turn the learned weight vector into plain-English insights.
-
-    Positive weight for a feature → user likes colors high in that feature.
-    Negative weight             → user dislikes colors high in that feature.
-
-    We only report the two or three features with the largest |weight|
-    so the summary stays concise.
+    Translate learned weights into plain English.
+    Reports the 3 most influential features (by |weight|).
     """
-    # Map feature name → human-readable interpretation pair
     interpretations = {
         "hue": (
-            "You lean toward cooler hues (greens, blues, purples)",
-            "You lean toward warmer hues (reds, oranges, yellows)"
+            "You lean toward cooler hues — greens, teals, blues",
+            "You lean toward warmer hues — reds, oranges, yellows"
         ),
         "saturation": (
             "You prefer vivid, highly saturated colors",
@@ -208,22 +206,41 @@ def preference_summary(w: np.ndarray, feature_names: list[str]) -> list[str]:
             "You love rich, colorful tones over neutrals",
             "You prefer neutral or near-achromatic colors"
         ),
+        "chroma": (
+            "You're drawn to high-chroma, perceptually intense colors",
+            "You prefer low-chroma, subtle colors"
+        ),
+        "blue_bias": (
+            "Blues and cyans have a strong pull on you",
+            "You're not particularly drawn to blue tones"
+        ),
+        "red_bias": (
+            "Reds, pinks, and warm saturated tones appeal to you",
+            "You tend away from red-dominant colors"
+        ),
     }
 
-    # Sort features by absolute weight magnitude (most influential first)
     order = np.argsort(np.abs(w))[::-1]
     lines = []
-    for i in order[:3]:   # top 3 most influential features
+    seen_axes = set()
+
+    for i in order:
+        if len(lines) >= 3:
+            break
         name = feature_names[i]
-        val  = w[i]
-        if abs(val) < 0.05:
-            continue   # weight too small to say anything meaningful
-        pos_text, neg_text = interpretations.get(name, (name, name))
-        if val > 0:
-            lines.append(f"✦ {pos_text}")
-        else:
-            lines.append(f"✦ {neg_text}")
+        val = w[i]
+        if abs(val) < 0.03:
+            continue
+
+        # Avoid redundant statements (warmth and hue overlap; blue/red and warmth overlap)
+        axis = "warm_cool" if name in ("hue", "warmth", "blue_bias", "red_bias") else name
+        if axis in seen_axes:
+            continue
+        seen_axes.add(axis)
+
+        pos_text, neg_text = interpretations.get(name, (f"high {name}", f"low {name}"))
+        lines.append(pos_text if val > 0 else neg_text)
 
     if not lines:
-        lines.append("✦ Your preferences are still a bit mysterious — try more rounds!")
+        lines.append("Your preferences are still forming — try a few more rounds.")
     return lines
