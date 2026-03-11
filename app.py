@@ -378,6 +378,8 @@ elif st.session_state.phase == "playing":
         st.session_state.current_pair = pick_pair()
 
     idx_A, idx_B = st.session_state.current_pair
+    name_A, hex_A = COLOR_NAMES[idx_A], COLOR_HEXES[idx_A]
+    name_B, hex_B = COLOR_NAMES[idx_B], COLOR_HEXES[idx_B]
 
     # Arrow key component: attaches keydown to window.parent and sends
     # value via postMessage — no page reload, no iframe focus needed.
