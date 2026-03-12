@@ -60,13 +60,14 @@ st.markdown("""
   .stApp {
     background: linear-gradient(
       135deg,
-      #fde8f0 0%,
-      #fef3e2 18%,
-      #e8f8f0 36%,
-      #e8f0fe 54%,
-      #f3e8fe 72%,
-      #fde8f0 100%
+      #f9c5d1 0%,
+      #fddcaa 20%,
+      #b8f0d8 38%,
+      #b8d8f8 56%,
+      #d8b8f8 76%,
+      #f9c5d1 100%
     ) !important;
+    background-attachment: fixed !important;
   }
 
   /* Typography */
@@ -252,6 +253,7 @@ def init_state():
         "phase":         "intro",
         "current_pair":  None,
         "just_picked":   None,
+        "pending_choice": None,  # (chosen_idx, other_idx) waiting for highlight pause
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -303,7 +305,8 @@ def pick_pair() -> tuple[int, int]:
 
 # ── Color swatch HTML ─────────────────────────────────────────────────────────
 
-def swatch_html(hex_code: str, name: str, key_label: str = "") -> str:
+def swatch_html(hex_code: str, name: str, key_label: str = "", state: str = "normal") -> str:
+    """state: 'normal' | 'chosen' | 'dimmed'"""
     text_color = "#ffffff" if is_dark(hex_code) else "#111111"
     key_badge = (
         f'<div style="position:absolute;top:10px;right:12px;'
@@ -312,6 +315,13 @@ def swatch_html(hex_code: str, name: str, key_label: str = "") -> str:
         f'color:{text_color}88;letter-spacing:0.05em;">{key_label}</div>'
         if key_label else ""
     )
+    check = (
+        '<div style="position:absolute;top:10px;left:12px;background:rgba(255,255,255,0.92);'
+        'border-radius:50%;width:24px;height:24px;display:flex;align-items:center;'
+        'justify-content:center;font-size:14px;color:#111;">&#10003;</div>'
+    ) if state == "chosen" else ""
+    outline = "outline:4px solid rgba(0,0,0,0.85);outline-offset:2px;" if state == "chosen" else ""
+    opacity = "opacity:0.3;filter:grayscale(70%);" if state == "dimmed" else ""
     return f"""
     <div style="
         position:relative;
@@ -324,8 +334,9 @@ def swatch_html(hex_code: str, name: str, key_label: str = "") -> str:
         justify-content:center;
         box-shadow: 0 6px 30px {hex_code}40;
         user-select:none;
+        {outline}{opacity}
     ">
-      {key_badge}
+      {key_badge}{check}
       <div style="
         font-family:'Fraunces',serif;
         font-size:1.05rem;
@@ -373,7 +384,7 @@ def record_choice(chosen_idx: int, other_idx: int):
 
 def do_restart():
     for key in ["comparisons", "pairs_shown", "weights", "adam_m", "adam_v",
-                "round", "phase", "current_pair", "just_picked"]:
+                "round", "phase", "current_pair", "just_picked", "pending_choice"]:
         if key in st.session_state:
             del st.session_state[key]
 
@@ -462,94 +473,152 @@ elif st.session_state.phase == "playing":
     name_A, hex_A = COLOR_NAMES[idx_A], COLOR_HEXES[idx_A]
     name_B, hex_B = COLOR_NAMES[idx_B], COLOR_HEXES[idx_B]
 
-    # Arrow keys: highlight swatch visually first (instant), then click after delay
-    _components.html("""
+    pending = st.session_state.pending_choice  # (chosen_idx, other_idx) or None
+
+    # ── If we're in the "highlight" phase, commit the choice ─────────────────
+    # A hidden button is clicked by JS after 500ms to advance.
+    if pending is not None:
+        # Render same pair with highlight, then JS auto-clicks the confirm button
+        state_A = "chosen" if pending[0] == idx_A else "dimmed"
+        state_B = "chosen" if pending[0] == idx_B else "dimmed"
+
+        left_head, right_head = st.columns([3, 1])
+        with left_head:
+            st.markdown(
+                f'<p style="font-family:\'DM Mono\',monospace;font-size:0.7rem;'
+                f'letter-spacing:0.08em;text-transform:uppercase;color:#888;">'
+                f'Round {n_done + 1} of {N_ROUNDS}</p>',
+                unsafe_allow_html=True
+            )
+        with right_head:
+            pct = int(n_done / N_ROUNDS * 100)
+            st.markdown(
+                f'<p style="font-family:\'DM Mono\',monospace;font-size:0.7rem;'
+                f'color:#999;text-align:right;">{pct}%</p>',
+                unsafe_allow_html=True
+            )
+        st.progress(n_done / N_ROUNDS)
+        st.markdown(
+            '<p style="font-family:\'Fraunces\',serif;font-size:1.25rem;'
+            'font-weight:600;margin:1.4rem 0 1rem;letter-spacing:-0.01em;">'
+            'Which color do you prefer?</p>',
+            unsafe_allow_html=True
+        )
+
+        col_a, gap, col_b = st.columns([10, 1, 10])
+        with col_a:
+            st.markdown(swatch_html(hex_A, name_A, key_label="← left", state=state_A), unsafe_allow_html=True)
+        with gap:
+            st.markdown(
+                '<div style="display:flex;align-items:center;justify-content:center;'
+                'height:200px;color:#bbb;font-size:0.75rem;font-family:\'DM Mono\','
+                'monospace;">or</div>',
+                unsafe_allow_html=True
+            )
+        with col_b:
+            st.markdown(swatch_html(hex_B, name_B, key_label="right →", state=state_B), unsafe_allow_html=True)
+
+        # Hidden confirm button — JS clicks it after 500ms
+        confirm_col = st.columns([1, 1, 1])
+        with confirm_col[1]:
+            st.markdown('<div style="display:none" id="confirm-wrap">', unsafe_allow_html=True)
+            if st.button("confirm", key="btn_confirm"):
+                chosen, other = st.session_state.pending_choice
+                st.session_state.pending_choice = None
+                record_choice(chosen, other)
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # JS: auto-click confirm after 500ms, expose it briefly for the click
+        _components.html("""
+<script>
+(function() {
+  var par = window.parent.document;
+  // Unhide the confirm button, click it after 500ms
+  var wrap = par.getElementById('confirm-wrap');
+  if (wrap) wrap.style.display = 'block';
+  setTimeout(function() {
+    var btn = par.querySelector('#confirm-wrap button');
+    if (btn) btn.click();
+  }, 500);
+})();
+</script>""", height=0)
+
+    else:
+        # ── Normal state: show pair, listen for keys/clicks ───────────────────
+
+        # Arrow keys: set pending_choice then rerun to show highlight frame
+        _components.html("""
 <script>
 (function() {
   var par = window.parent.document;
   if (par.__arrowKeysReady) return;
   par.__arrowKeysReady = true;
+
   par.addEventListener('keydown', function(e) {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
     var isLeft = e.key === 'ArrowLeft';
-
-    // Highlight the chosen swatch immediately
-    var swatches = par.querySelectorAll('.swatch-wrap');
-    swatches.forEach(function(s) { s.classList.remove('selected'); });
-    if (swatches.length >= 2) {
-      swatches[isLeft ? 0 : 1].classList.add('selected');
-    }
-
-    // Click the button after a short delay so user sees the highlight
-    setTimeout(function() {
-      var btns = Array.from(par.querySelectorAll('.stButton > button'))
-                      .filter(function(b) { return b.offsetParent !== null; });
-      var idx = isLeft ? 0 : 1;
-      if (btns[idx]) btns[idx].click();
-    }, 220);
+    // Click btn_a or btn_b to set pending via Streamlit button handler
+    var btns = Array.from(par.querySelectorAll('.stButton > button'))
+                    .filter(function(b) { return b.offsetParent !== null; });
+    var idx = isLeft ? 0 : 1;
+    if (btns[idx]) btns[idx].click();
   });
 })();
 </script>""", height=0)
 
-    # Header row
-    left_head, right_head = st.columns([3, 1])
-    with left_head:
+        left_head, right_head = st.columns([3, 1])
+        with left_head:
+            st.markdown(
+                f'<p style="font-family:\'DM Mono\',monospace;font-size:0.7rem;'
+                f'letter-spacing:0.08em;text-transform:uppercase;color:#888;">'
+                f'Round {n_done + 1} of {N_ROUNDS}</p>',
+                unsafe_allow_html=True
+            )
+        with right_head:
+            pct = int(n_done / N_ROUNDS * 100)
+            st.markdown(
+                f'<p style="font-family:\'DM Mono\',monospace;font-size:0.7rem;'
+                f'color:#999;text-align:right;">{pct}%</p>',
+                unsafe_allow_html=True
+            )
+
+        st.progress(n_done / N_ROUNDS)
         st.markdown(
-            f'<p style="font-family:\'DM Mono\',monospace;font-size:0.7rem;'
-            f'letter-spacing:0.08em;text-transform:uppercase;color:#555;">'
-            f'Round {n_done + 1} of {N_ROUNDS}</p>',
-            unsafe_allow_html=True
-        )
-    with right_head:
-        pct = int(n_done / N_ROUNDS * 100)
-        st.markdown(
-            f'<p style="font-family:\'DM Mono\',monospace;font-size:0.7rem;'
-            f'color:#444;text-align:right;">{pct}%</p>',
-            unsafe_allow_html=True
-        )
-
-    st.progress(n_done / N_ROUNDS)
-
-    st.markdown(
-        '<p style="font-family:\'Fraunces\',serif;font-size:1.25rem;'
-        'font-weight:600;margin:1.4rem 0 1rem;letter-spacing:-0.01em;">'
-        'Which color do you prefer?</p>',
-        unsafe_allow_html=True
-    )
-
-    # Swatch columns
-    col_a, gap, col_b = st.columns([10, 1, 10])
-
-    with col_a:
-        st.markdown('<div class="swatch-wrap" id="swatch-a">', unsafe_allow_html=True)
-        st.markdown(swatch_html(hex_A, name_A, key_label="← left"), unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-        with st.container():
-            st.markdown('<div class="choice-btn">', unsafe_allow_html=True)
-            if st.button(name_A, key="btn_a", use_container_width=True):
-                record_choice(idx_A, idx_B)
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    with gap:
-        st.markdown(
-            '<div style="display:flex;align-items:center;justify-content:center;'
-            'height:200px;color:#bbb;font-size:0.75rem;font-family:\'DM Mono\','
-            'monospace;">or</div>',
+            '<p style="font-family:\'Fraunces\',serif;font-size:1.25rem;'
+            'font-weight:600;margin:1.4rem 0 1rem;letter-spacing:-0.01em;">'
+            'Which color do you prefer?</p>',
             unsafe_allow_html=True
         )
 
-    with col_b:
-        st.markdown('<div class="swatch-wrap" id="swatch-b">', unsafe_allow_html=True)
-        st.markdown(swatch_html(hex_B, name_B, key_label="right →"), unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-        with st.container():
-            st.markdown('<div class="choice-btn">', unsafe_allow_html=True)
-            if st.button(name_B, key="btn_b", use_container_width=True):
-                record_choice(idx_B, idx_A)
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+        col_a, gap, col_b = st.columns([10, 1, 10])
+
+        with col_a:
+            st.markdown(swatch_html(hex_A, name_A, key_label="← left"), unsafe_allow_html=True)
+            with st.container():
+                st.markdown('<div class="choice-btn">', unsafe_allow_html=True)
+                if st.button(name_A, key="btn_a", use_container_width=True):
+                    st.session_state.pending_choice = (idx_A, idx_B)
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+
+        with gap:
+            st.markdown(
+                '<div style="display:flex;align-items:center;justify-content:center;'
+                'height:200px;color:#bbb;font-size:0.75rem;font-family:\'DM Mono\','
+                'monospace;">or</div>',
+                unsafe_allow_html=True
+            )
+
+        with col_b:
+            st.markdown(swatch_html(hex_B, name_B, key_label="right →"), unsafe_allow_html=True)
+            with st.container():
+                st.markdown('<div class="choice-btn">', unsafe_allow_html=True)
+                if st.button(name_B, key="btn_b", use_container_width=True):
+                    st.session_state.pending_choice = (idx_B, idx_A)
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
     # Live model status
     if n_done >= LIVE_AFTER:
@@ -703,43 +772,154 @@ elif st.session_state.phase == "results":
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # ── Math expander ────────────────────────────────────────────────────────
-    with st.expander("Math analysis — how the prediction was made"):
-        st.markdown("""
-**Pairwise preference model**
+    # ── Math explainer ───────────────────────────────────────────────────────
+    with st.expander("How it works — the math"):
+        st.components.v1.html(r"""
+<!DOCTYPE html>
+<html>
+<head>
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']] },
+  options: { skipHtmlTags: ['script','noscript','style','textarea'] }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Georgia', serif;
+    font-size: 13.5px;
+    color: #1a1612;
+    line-height: 1.7;
+    padding: 4px 2px 12px 2px;
+  }
+  .section { margin-bottom: 20px; }
+  .section-title {
+    font-family: 'Arial', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #820034;
+    border-bottom: 1.5px solid #e8c8d4;
+    padding-bottom: 4px;
+    margin-bottom: 10px;
+  }
+  p { margin-bottom: 8px; }
+  .mathbox {
+    background: #fff8fc;
+    border-left: 3px solid #820034;
+    border-radius: 0 6px 6px 0;
+    padding: 10px 16px;
+    margin: 8px 0;
+    overflow-x: auto;
+  }
+  .note {
+    font-family: 'Arial', sans-serif;
+    font-size: 11.5px;
+    color: #888;
+    font-style: italic;
+    margin-top: 4px;
+  }
+  .pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .pill {
+    font-family: 'Arial', sans-serif;
+    font-size: 11px;
+    background: #f5eef2;
+    color: #820034;
+    border-radius: 20px;
+    padding: 3px 10px;
+  }
+</style>
+</head>
+<body>
 
-Each comparison is a Bernoulli r.v. with probability set by logistic regression:
+<div class="section">
+  <div class="section-title">1 · Bernoulli Trial Model</div>
+  <p>
+    Each round presents two colors $A$ and $B$. The choice is modeled as a
+    Bernoulli trial — $Y_i = 1$ if you chose $A$, $Y_i = 0$ if you chose $B$.
+    The probability depends on the dot product of a learned weight vector
+    $\mathbf{w} \in \mathbb{R}^8$ with the feature difference:
+  </p>
+  <div class="mathbox">
+    $$p_i = P(Y_i = 1 \mid \mathbf{w}) = \frac{1}{1 + e^{-\mathbf{w}^\top (\mathbf{x}_A - \mathbf{x}_B)}}$$
+  </div>
+  <p>So each observation follows $Y_i \sim \text{Bernoulli}(p_i)$.</p>
+</div>
 
-```
-P(choose A | w) = σ( w · (x_A − x_B) )     σ(z) = 1 / (1 + e^{−z})
-```
+<div class="section">
+  <div class="section-title">2 · Maximum Likelihood Estimation</div>
+  <p>
+    Assuming the 30 comparisons are independent, the joint likelihood is a
+    product of Bernoulli terms. Taking the log turns it into a tractable sum:
+  </p>
+  <div class="mathbox">
+    $$\ell(\mathbf{w}) = \sum_{i=1}^n \bigl[ y_i \log p_i + (1 - y_i)\log(1 - p_i) \bigr]$$
+  </div>
+  <p>
+    We maximize $\ell(\mathbf{w})$, which is equivalent to finding the weights
+    most consistent with every choice you made.
+  </p>
+</div>
 
-**MLE objective (regularized negative log-likelihood)**
+<div class="section">
+  <div class="section-title">3 · Gradient Ascent</div>
+  <p>
+    There's no closed-form solution, so we optimize iteratively.
+    The gradient of the log-likelihood has a clean form:
+  </p>
+  <div class="mathbox">
+    $$\frac{\partial \ell}{\partial w_k} = \sum_{i=1}^n (y_i - p_i)\,\Delta x_{ik}$$
+  </div>
+  <p>
+    The term $(y_i - p_i)$ is the prediction error. The update rule
+    nudges each weight in the direction that better explains your choices:
+  </p>
+  <div class="mathbox">
+    $$\mathbf{w} \;\leftarrow\; \mathbf{w} + \alpha \,\nabla_\mathbf{w}\,\ell(\mathbf{w})$$
+  </div>
+  <p class="note">
+    In practice Adam is used — it adapts the learning rate per feature using
+    running estimates of gradient momentum and variance.
+  </p>
+</div>
 
-```
-ŵ = argmin  −∑ᵢ [yᵢ log pᵢ + (1−yᵢ) log(1−pᵢ)]  +  λ‖w‖²
-```
+<div class="section">
+  <div class="section-title">4 · Prediction</div>
+  <p>
+    After training, every color $c$ in a pool of 121 candidates is scored
+    by its alignment with $\hat{\mathbf{w}}$:
+  </p>
+  <div class="mathbox">
+    $$\text{score}(c) = \hat{\mathbf{w}}^\top \mathbf{x}_c \qquad
+    \text{favorite} = \operatorname*{arg\,max}_c\; \hat{\mathbf{w}}^\top \mathbf{x}_c$$
+  </div>
+  <p>
+    Softmax converts scores into a probability distribution shown in the results.
+    Each color $\mathbf{x}_c \in \mathbb{R}^8$ encodes:
+  </p>
+  <div class="pill-row">
+    <span class="pill">hue</span>
+    <span class="pill">saturation</span>
+    <span class="pill">brightness</span>
+    <span class="pill">warmth</span>
+    <span class="pill">colorfulness</span>
+    <span class="pill">chroma</span>
+    <span class="pill">blue bias</span>
+    <span class="pill">red bias</span>
+  </div>
+</div>
 
-**Gradient used in each Adam step**
-
-```
-∇L(w) = (1/n) ∑ᵢ (pᵢ − yᵢ)(x_Aᵢ − x_Bᵢ)  +  2λw
-```
-
-**Adam update rule** (adaptive moment estimation, 600 steps per round)
-
-```
-m ← β₁m + (1−β₁)∇         first moment  (momentum)
-v ← β₂v + (1−β₂)∇²        second moment (per-feature learning rate)
-w ← w − α · m̂ / (√v̂ + ε)  bias-corrected parameter update
-```
-
-**Scoring & prediction:** `score(c) = ŵ · x_c` for all 121 colors → argmax.  
-Softmax over raw scores yields the probability distribution shown above.
-
-**Feature vector x** (8 dims, all normalized to [0, 1])  
-hue · saturation · brightness · warmth · colorfulness · chroma · blue_bias · red_bias
-""")
+</body>
+</html>
+""", height=720, scrolling=False)
 
     # ── Restart ──────────────────────────────────────────────────────────────
     st.markdown("")
