@@ -711,168 +711,74 @@ elif st.session_state.phase == "results":
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # ── Math explainer ───────────────────────────────────────────────────────
-    with st.expander("How it works — the math"):
-        st.components.v1.html(r"""
-<!DOCTYPE html>
-<html>
-<head>
+    # ── Math explainer (inline 2x2 grid) ────────────────────────────────────────
+    st.markdown(
+        '<p style="font-family:DM Mono,monospace;font-size:0.65rem;'
+        'letter-spacing:0.1em;text-transform:uppercase;color:#555;margin-bottom:1rem;">'
+        'How it works</p>',
+        unsafe_allow_html=True
+    )
+    st.components.v1.html(r"""<!DOCTYPE html>
+<html><head>
 <script>
-window.MathJax = {
-  tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']] },
-  options: { skipHtmlTags: ['script','noscript','style','textarea'] }
-};
+window.MathJax={tex:{inlineMath:[['$','$']],displayMath:[['$$','$$']]},options:{skipHtmlTags:['script','noscript','style','textarea']}};
 </script>
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'Georgia', serif;
-    font-size: 13.5px;
-    color: #1a1612;
-    line-height: 1.7;
-    padding: 4px 2px 12px 2px;
-  }
-  .section { margin-bottom: 20px; }
-  .section-title {
-    font-family: 'Arial', sans-serif;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: #820034;
-    border-bottom: 1.5px solid #e8c8d4;
-    padding-bottom: 4px;
-    margin-bottom: 10px;
-  }
-  p { margin-bottom: 8px; }
-  .mathbox {
-    background: #fff8fc;
-    border-left: 3px solid #820034;
-    border-radius: 0 6px 6px 0;
-    padding: 10px 16px;
-    margin: 8px 0;
-    overflow-x: auto;
-  }
-  .note {
-    font-family: 'Arial', sans-serif;
-    font-size: 11.5px;
-    color: #888;
-    font-style: italic;
-    margin-top: 4px;
-  }
-  .pill-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 6px;
-  }
-  .pill {
-    font-family: 'Arial', sans-serif;
-    font-size: 11px;
-    background: #f5eef2;
-    color: #820034;
-    border-radius: 20px;
-    padding: 3px 10px;
-  }
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:transparent;overflow:visible}
+body{font-family:Georgia,serif;font-size:13px;color:#1a1612;line-height:1.75}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.card{background:white;border:1px solid #e8ddd5;border-radius:10px;padding:15px 17px}
+.t{font-family:Arial,sans-serif;font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#820034;margin-bottom:8px}
+p{margin-bottom:6px;font-size:13px}
+p:last-child{margin-bottom:0}
+.mb{background:#fff8fc;border-left:3px solid #d4a0b0;border-radius:0 6px 6px 0;padding:7px 12px;margin:7px 0}
+.pr{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.pill{font-family:Arial,sans-serif;font-size:10.5px;background:#f5eef2;color:#820034;border-radius:20px;padding:2px 9px}
 </style>
-</head>
-<body>
+</head><body>
+<div class="grid">
 
-<div class="section">
-  <div class="section-title">1 · Bernoulli Trial Model</div>
-  <p>
-    Each round presents two colors $A$ and $B$. The choice is modeled as a
-    Bernoulli trial — $Y_i = 1$ if you chose $A$, $Y_i = 0$ if you chose $B$.
-    The probability depends on the dot product of a learned weight vector
-    $\mathbf{w} \in \mathbb{R}^8$ with the feature difference:
-  </p>
-  <div class="mathbox">
-    $$p_i = P(Y_i = 1 \mid \mathbf{w}) = \frac{1}{1 + e^{-\mathbf{w}^\top (\mathbf{x}_A - \mathbf{x}_B)}}$$
-  </div>
-  <p>So each observation follows $Y_i \sim \text{Bernoulli}(p_i)$.</p>
+<div class="card">
+<div class="t">1 · Bernoulli Trial</div>
+<p>Each of 30 comparisons is a Bernoulli trial. You pick $A$ or $B$, giving $Y_i \in \{0,1\}$.</p>
+<div class="mb">$$p_i = \frac{1}{1+e^{-\mathbf{w}^\top(\mathbf{x}_A - \mathbf{x}_B)}}$$</div>
+<p>$\mathbf{w} \in \mathbb{R}^8$ encodes your preference across 8 color features.</p>
 </div>
 
-<div class="section">
-  <div class="section-title">2 · Maximum Likelihood Estimation</div>
-  <p>
-    Assuming the 30 comparisons are independent, the joint likelihood is a
-    product of Bernoulli terms. Taking the log turns it into a tractable sum:
-  </p>
-  <div class="mathbox">
-    $$\ell(\mathbf{w}) = \sum_{i=1}^n \bigl[ y_i \log p_i + (1 - y_i)\log(1 - p_i) \bigr]$$
-  </div>
-  <p>
-    We maximize $\ell(\mathbf{w})$, which is equivalent to finding the weights
-    most consistent with every choice you made.
-  </p>
+<div class="card">
+<div class="t">2 · Log-Likelihood (MLE)</div>
+<p>Assuming independence, maximize the log-likelihood over all choices:</p>
+<div class="mb">$$\ell(\mathbf{w}) = \sum_{i=1}^{n} \bigl[y_i \log p_i + (1-y_i)\log(1-p_i)\bigr]$$</div>
+<p>$\hat{\mathbf{w}} = \arg\max\,\ell(\mathbf{w})$ — weights most consistent with your choices.</p>
 </div>
 
-<div class="section">
-  <div class="section-title">3 · Gradient Ascent</div>
-  <p>
-    There's no closed-form solution, so we optimize iteratively.
-    The gradient of the log-likelihood has a clean form:
-  </p>
-  <div class="mathbox">
-    $$\frac{\partial \ell}{\partial w_k} = \sum_{i=1}^n (y_i - p_i)\,\Delta x_{ik}$$
-  </div>
-  <p>
-    The term $(y_i - p_i)$ is the prediction error. The update rule
-    nudges each weight in the direction that better explains your choices:
-  </p>
-  <div class="mathbox">
-    $$\mathbf{w} \;\leftarrow\; \mathbf{w} + \alpha \,\nabla_\mathbf{w}\,\ell(\mathbf{w})$$
-  </div>
-  <p class="note">
-    In practice Adam is used — it adapts the learning rate per feature using
-    running estimates of gradient momentum and variance.
-  </p>
+<div class="card">
+<div class="t">3 · Gradient Ascent</div>
+<p>No closed form — climb the gradient iteratively (Adam, 600 steps/round):</p>
+<div class="mb">$$\frac{\partial \ell}{\partial w_k} = \sum_i (y_i - p_i)\,\Delta x_{ik}$$</div>
+<p>$(y_i - p_i)$ is the prediction error per comparison.</p>
 </div>
 
-<div class="section">
-  <div class="section-title">4 · Prediction</div>
-  <p>
-    After training, every color $c$ in a pool of 121 candidates is scored
-    by its alignment with $\hat{\mathbf{w}}$:
-  </p>
-  <div class="mathbox">
-    $$\text{score}(c) = \hat{\mathbf{w}}^\top \mathbf{x}_c \qquad
-    \text{favorite} = \operatorname*{arg\,max}_c\; \hat{\mathbf{w}}^\top \mathbf{x}_c$$
-  </div>
-  <p>
-    Softmax converts scores into a probability distribution shown in the results.
-    Each color $\mathbf{x}_c \in \mathbb{R}^8$ encodes:
-  </p>
-  <div class="pill-row">
-    <span class="pill">hue</span>
-    <span class="pill">saturation</span>
-    <span class="pill">brightness</span>
-    <span class="pill">warmth</span>
-    <span class="pill">colorfulness</span>
-    <span class="pill">chroma</span>
-    <span class="pill">blue bias</span>
-    <span class="pill">red bias</span>
-  </div>
+<div class="card">
+<div class="t">4 · Prediction</div>
+<p>Score every color, pick the best:</p>
+<div class="mb">$$\hat{c} = \operatorname*{arg\,max}_c\;\hat{\mathbf{w}}^\top \mathbf{x}_c$$</div>
+<p>$\mathbf{x}_c \in \mathbb{R}^8$:</p>
+<div class="pr">
+<span class="pill">hue</span><span class="pill">saturation</span><span class="pill">brightness</span><span class="pill">warmth</span><span class="pill">colorfulness</span><span class="pill">chroma</span><span class="pill">blue bias</span><span class="pill">red bias</span>
+</div>
 </div>
 
+</div>
 <script>
-(function() {
-  function resize() {
-    var h = document.documentElement.scrollHeight;
-    if (window.frameElement) window.frameElement.style.height = (h + 20) + 'px';
-  }
-  if (window.MathJax && window.MathJax.startup) {
-    window.MathJax.startup.promise.then(resize);
-  } else {
-    setTimeout(resize, 800);
-  }
+(function(){
+  function r(){var h=document.body.scrollHeight;if(window.frameElement)window.frameElement.style.height=(h+8)+'px';}
+  if(window.MathJax&&window.MathJax.startup){window.MathJax.startup.promise.then(r);}else{setTimeout(r,1000);}
 })();
 </script>
-</body>
-</html>
-""", height=880, scrolling=True)
-
+</body></html>""", height=500, scrolling=False)
     # ── Restart ──────────────────────────────────────────────────────────────
     st.markdown("")
     col1, col2, col3 = st.columns([1, 1.4, 1])
