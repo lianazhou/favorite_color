@@ -165,7 +165,7 @@ st.markdown("""
     border-bottom-color: var(--purple) !important;
   }
 
-  /* Expander — fix arrow/text overlap */
+  /* Expander */
   [data-testid="stExpander"] {
     border: 1px solid var(--border) !important;
     border-radius: 8px !important;
@@ -184,22 +184,29 @@ st.markdown("""
     display: flex !important;
     align-items: center !important;
     gap: 0.5rem !important;
+    cursor: pointer !important;
   }
   [data-testid="stExpander"] summary::marker,
   [data-testid="stExpander"] summary::-webkit-details-marker {
     display: none !important;
   }
+  /* Chevron floated right so it never overlaps the label text */
   [data-testid="stExpander"] summary > div {
     display: flex !important;
+    flex-direction: row !important;
     align-items: center !important;
-    gap: 0.5rem !important;
+    justify-content: space-between !important;
     width: 100% !important;
   }
   [data-testid="stExpander"] summary svg {
     width: 14px !important;
     height: 14px !important;
     flex-shrink: 0 !important;
-    color: var(--dim) !important;
+    order: 2 !important;
+  }
+  [data-testid="stExpander"] summary > div > span,
+  [data-testid="stExpander"] summary > div > p {
+    order: 1 !important;
   }
   [data-testid="stExpanderDetails"] {
     padding: 0.2rem 1.1rem 1.1rem !important;
@@ -849,9 +856,22 @@ window.MathJax = {
   </div>
 </div>
 
+<script>
+(function() {
+  function resize() {
+    var h = document.documentElement.scrollHeight;
+    if (window.frameElement) window.frameElement.style.height = (h + 20) + 'px';
+  }
+  if (window.MathJax && window.MathJax.startup) {
+    window.MathJax.startup.promise.then(resize);
+  } else {
+    setTimeout(resize, 800);
+  }
+})();
+</script>
 </body>
 </html>
-""", height=720, scrolling=False)
+""", height=880, scrolling=True)
 
     # ── Restart ──────────────────────────────────────────────────────────────
     st.markdown("")
